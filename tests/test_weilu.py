@@ -1,0 +1,671 @@
+"""围炉夜话测试：协议符合性（对照接入指南§8）+ 状态机 + 安全 + 换人 + 全流程回放。"""
+from __future__ import annotations
+
+import asyncio
+import io
+
+import httpx
+import pytest
+import pytest_asyncio
+
+from app import director, prompts, safety
+from app.config import load_characters, load_theme_config
+from app.main import app
+from app.session import (
+    ENDED,
+    FORM_CHAT,
+    FORM_PAINTING,
+    GREETING,
+    build_team,
+    detect_form,
+    detect_theme,
+    extract_text,
+    is_confirm,
+    make_marker,
+    parse_swap_request,
+    reconstruct,
+    swap_member,
+    wants_reset,
+)
+
+API_KEY = "sk-weilu-dev-key"
+HEADERS = {"Authorization": f"Bearer {API_KEY}"}
+
+# 稳定seed会选出的队伍id（与 build_team 的 stable_pick 对应，直接构造）
+TEAM_ACADEMIC = ["zengguofan", "einstein", "chenmo", "xiaoman"]
+TEAM_SELF = ["sushi", "zhuangzi", "linzhiheng", "xiaoman"]
+
+
+@pytest_asyncio.fixture
+async def client():
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+
+
+# ---------- 协议符合性（接入指南 §8 自测清单） ----------
+
+
+@pytest.mark.asyncio
+async def test_models_200_and_auth(client):
+    resp = await client.get("/v1/models", headers=HEADERS)
+    assert resp.status_code == 200
+    assert resp.json()["data"][0]["id"]
+    assert (await client.get("/v1/models")).status_code == 401
+    bad = {"Authorization": "Bearer wrong"}
+    assert (await client.get("/v1/models", headers=bad)).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_nonstream_minimal_chat(client, monkeypatch):
+    async def fake_generate(providers, messages, **kw):
+        return "【小晴】你好。"
+
+    monkeypatch.setattr("app.director.generate", fake_generate)
+    resp = await client.post(
+        "/v1/chat/completions",
+        headers=HEADERS,
+        json={"messages": [{"role": "user", "content": "你好"}]},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["choices"][0]["message"]["content"]
+    assert data["choices"][0]["finish_reason"] == "stop"
+    assert data["usage"]["total_tokens"] > 0
+
+
+@pytest.mark.asyncio
+async def test_stream_frames_order(client, monkeypatch):
+    async def fake_stream(providers, messages, **kw):
+        for piece in ("【小晴】", "你好", "呀"):
+            yield piece
+
+    monkeypatch.setattr("app.director.stream_generate", fake_stream)
+    resp = await client.post(
+        "/v1/chat/completions",
+        headers=HEADERS,
+        json={"stream": True, "messages": [{"role": "user", "content": "学业压力大"}]},
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    events = [ln[6:] for ln in resp.text.splitlines() if ln.startswith("data: ")]
+    assert events[-1] == "[DONE]"
+    import json
+
+    frames = [json.loads(e) for e in events[:-1]]
+    assert frames[0]["choices"][0]["delta"].get("role") == "assistant"
+    contents = "".join(f["choices"][0]["delta"].get("content", "") for f in frames)
+    assert "【小晴】" in contents
+    stop = frames[-1]
+    assert stop["choices"][0]["finish_reason"] == "stop"
+    assert stop.get("usage", {}).get("total_tokens", 0) > 0
+
+
+@pytest.mark.asyncio
+async def test_probe_fast_path(client):
+    resp = await client.post(
+        "/v1/chat/completions",
+        headers=HEADERS,
+        json={"stream": True, "max_tokens": 1, "messages": [{"role": "user", "content": "你好"}]},
+    )
+    assert resp.status_code == 200
+    assert "data: [DONE]" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_stream_string_false_is_not_stream(client):
+    resp = await client.post(
+        "/v1/chat/completions",
+        headers=HEADERS,
+        json={"stream": "false", "messages": [{"role": "user", "content": "你好"}]},
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/json")
+
+
+@pytest.mark.asyncio
+async def test_multimodal_content_array(client, monkeypatch):
+    async def fake_generate(providers, messages, **kw):
+        return "【小晴】你好。"
+
+    monkeypatch.setattr("app.director.generate", fake_generate)
+    resp = await client.post(
+        "/v1/chat/completions",
+        headers=HEADERS,
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "最近很迷茫"},
+                        {"type": "image_url", "image_url": {"url": "https://x/p.png"}},
+                    ],
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["choices"][0]["message"]["content"]
+
+
+# ---------- 会话状态机（8轮制 + 换人） ----------
+
+
+def _round_msg(round_no, label, theme, form=FORM_CHAT, team_ids=None):
+    return {
+        "role": "assistant",
+        "content": f"【小晴】……\n\n{make_marker(round_no, label, theme, form, team_ids)}",
+    }
+
+
+def test_marker_v3_roundtrip():
+    m = make_marker(3, "围炉入话", "学业压力", FORM_CHAT, TEAM_ACADEMIC)
+    parsed = None
+    from app.session import parse_marker
+
+    parsed = parse_marker("xx\n\n" + m)
+    assert parsed[0] == 3 and parsed[1] == "围炉入话"
+    assert parsed[2] == "学业压力" and parsed[3] == FORM_CHAT
+    assert parsed[4] == TEAM_ACADEMIC
+    # 画会形式
+    m2 = make_marker(4, "画作揭晓", "学业压力", FORM_PAINTING, TEAM_ACADEMIC)
+    assert parse_marker("x" + m2)[3] == FORM_PAINTING
+
+
+def test_reconstruct_stages_and_team():
+    msgs = [
+        {"role": "user", "content": "学业压力大"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+    ]
+    st = reconstruct(msgs)
+    assert st.stage == "ignite" and st.next_round == 2
+    assert st.team_ids == TEAM_ACADEMIC and st.team_variants == 1
+
+    msgs.append({"role": "user", "content": "开炉吧"})
+    msgs.append(_round_msg(2, "开炉", "学业压力", FORM_CHAT, TEAM_ACADEMIC))
+    st = reconstruct(msgs)
+    assert st.stage == "share" and st.next_round == 3
+
+    msgs = [{"role": "user", "content": "x"},
+            _round_msg(8, "成长手记", "学业压力", FORM_CHAT, TEAM_ACADEMIC)]
+    assert reconstruct(msgs).stage == ENDED
+
+
+def test_reconstruct_counts_swap_variants():
+    msgs = [
+        {"role": "user", "content": "聊学业压力"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "换掉曾国藩"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, ["simaqian", "einstein", "chenmo", "xiaoman"]),
+    ]
+    st = reconstruct(msgs)
+    assert st.team_variants == 2  # 换过1次
+    assert st.team_ids[0] == "simaqian"
+    assert st.stage == "ignite"  # 仍在确认阶段
+
+
+def test_detect_theme_and_form():
+    themes = load_theme_config()["themes"]
+    assert detect_theme("2", themes)["id"] == "academic"
+    assert detect_theme("我想聊学业压力", themes)["id"] == "academic"
+    assert detect_theme("最近科研做不动，导师催得紧", themes)["id"] == "academic"
+    assert detect_theme("想家，室友合不来", themes)["id"] == "connection"
+    assert detect_theme("我到底想要什么呢", themes)["id"] == "self"
+    assert detect_theme("秋招投简历压力大", themes)["id"] == "career"
+    assert detect_theme("你好", themes) is None
+    assert detect_form("画会") == FORM_PAINTING
+    assert detect_form("想一起画画") == FORM_PAINTING
+    assert detect_form("学业压力") == FORM_CHAT
+
+
+def test_parse_swap_request():
+    team = ["曾国藩", "爱因斯坦", "陈默", "小满"]
+    assert parse_swap_request("换掉曾国藩", team) == [0]
+    assert parse_swap_request("爱因斯坦不太合适，换一个", team) == [1]
+    assert parse_swap_request("都换掉吧", team) == [0, 1, 2, 3]
+    assert parse_swap_request("小满和陈默都换掉", team) == [2, 3]
+    assert parse_swap_request("开炉吧", team) is None
+    assert parse_swap_request("好的", team) is None
+
+
+def test_is_confirm():
+    assert is_confirm("开炉吧")
+    assert is_confirm("好的，就这样")
+    assert not is_confirm("我想换掉苏轼")
+
+
+def test_swap_member_same_slot():
+    themes = {t["id"]: t for t in load_theme_config()["themes"]}
+    chars = load_characters()
+    new_id = swap_member(themes["academic"], chars, TEAM_ACADEMIC, 0)
+    assert new_id in themes["academic"]["slots"]["bt_hist"]
+    assert new_id not in TEAM_ACADEMIC
+
+
+def test_wants_reset():
+    assert wants_reset("再来一场")
+    assert not wants_reset("我觉得好多了")
+
+
+def test_build_team_quota():
+    themes = {t["id"]: t for t in load_theme_config()["themes"]}
+    chars = load_characters()
+    for theme in themes.values():
+        team = build_team(theme, chars, f"seed|{theme['id']}")
+        types = sorted(m["personality_type"] for m in team)
+        assert types == sorted(["been-there", "been-there", "different-perspective", "quiet-resonator"])
+        team2 = build_team(theme, chars, f"seed|{theme['id']}")
+        assert [m["id"] for m in team] == [m["id"] for m in team2]
+
+
+# ---------- 安全 ----------
+
+
+def test_crisis_levels():
+    assert safety.detect("我最近总想死") == "high"
+    assert safety.detect("活着没意思") == "medium"
+    assert safety.detect("今天天气不错") is None
+
+
+def test_aid_reply_has_hotline():
+    reply = safety.aid_reply()
+    assert "400-161-9995" in reply
+    assert "小晴" in reply
+
+
+def test_plan_crisis_high_overrides_everything():
+    msgs = [
+        {"role": "user", "content": "学业压力大"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "我不想活了"},
+    ]
+    plan = director.plan_turn(msgs)
+    assert plan.kind == "scripted"
+    assert "400-161-9995" in plan.script
+    assert plan.meta["crisis"] == "high"
+
+
+# ---------- 导演计划 ----------
+
+
+def test_plan_greeting_short_text_gives_menu():
+    plan = director.plan_turn([{"role": "user", "content": "你好"}])
+    assert plan.kind == "scripted"
+    assert "1️⃣" in plan.script
+
+
+def test_plan_greeting_substantive_starts_invite():
+    plan = director.plan_turn([{"role": "user", "content": "最近感觉自己特别迷茫，不知道想要什么"}])
+    assert plan.kind == "generate"
+    assert plan.meta["stage"] == "invite" and plan.meta["round"] == 1
+    assert "围炉进度：第1/8轮" in plan.marker and "相邀" in plan.marker
+    assert "炉友：" in plan.marker
+    assert plan.meta["theme"] == "self"
+    assert len(plan.meta["team"]) == 4
+    # 相邀轮只有小晴发言
+    assert "小晴一个人发言" in plan.system_prompt
+
+
+def test_plan_seat_confirm_ignites():
+    msgs = [
+        {"role": "user", "content": "聊学业压力"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "开炉吧，就他们几位"},
+    ]
+    plan = director.plan_turn(msgs)
+    assert plan.kind == "generate"
+    assert plan.meta["stage"] == "ignite" and plan.meta["round"] == 2
+    assert "第2/8轮" in plan.marker and "开炉" in plan.marker
+    assert plan.meta["team"] == ["曾国藩", "爱因斯坦", "陈默", "小满"]
+
+
+def test_plan_seat_ambiguous_reasks_without_marker():
+    msgs = [
+        {"role": "user", "content": "聊学业压力"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "呃"},
+    ]
+    plan = director.plan_turn(msgs)
+    assert plan.kind == "scripted" and plan.marker == ""
+    assert "换" in plan.script
+
+
+def test_plan_swap_flow():
+    msgs = [
+        {"role": "user", "content": "聊学业压力"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "换掉曾国藩吧"},
+    ]
+    plan = director.plan_turn(msgs)
+    assert plan.kind == "generate"
+    assert plan.meta["stage"] == "seat"
+    assert plan.meta["departing"] == ["曾国藩"]
+    assert len(plan.meta["arriving"]) == 1
+    # 标记仍是第1轮·相邀（新阵容），仍在确认阶段
+    assert "第1/8轮 · 相邀" in plan.marker
+    new_ids = plan.marker.split("炉友：")[1].rstrip("）").split(",")
+    assert new_ids[0] != "zengguofan"
+    assert "司马迁" in plan.system_prompt  # 新成员人设已注入（同槽位替补）
+
+
+def test_plan_swap_cap():
+    after_first = ["simaqian", "einstein", "chenmo", "xiaoman"]       # 换1次：曾国藩→司马迁
+    after_second = ["simaqian", "newton", "suxiao", "wenyan"]          # 换2次（超量示意）
+    msgs = [
+        {"role": "user", "content": "聊学业压力"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "换掉曾国藩"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, after_first),
+        {"role": "user", "content": "再换一次新阵容"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, after_second),  # variants=3 → 已用完额度
+        {"role": "user", "content": "再换掉苏晓"},
+    ]
+    plan = director.plan_turn(msgs)
+    assert plan.kind == "scripted"
+    assert "全部" in plan.script  # NO_MORE_SWAP
+
+
+def test_plan_mid_session_uses_marker_team():
+    # 换人后的队伍要延续（标记携带ID）
+    swapped = ["simaqian", "newton", "suxiao", "wenyan"]
+    msgs = [
+        {"role": "user", "content": "聊学业压力"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "换掉爱因斯坦"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "开炉吧"},
+        _round_msg(2, "开炉", "学业压力", FORM_CHAT, swapped),
+        {"role": "user", "content": "像一台一直开着但没人用的电视机"},
+    ]
+    plan = director.plan_turn(msgs)
+    assert plan.meta["stage"] == "share" and plan.meta["round"] == 3
+    assert plan.meta["team"] == ["司马迁", "牛顿", "苏晓", "温言"]
+    assert "simaqian" in plan.marker  # 队伍ID延续进新标记
+
+
+def test_plan_ended_reset():
+    msgs = [{"role": "user", "content": "x"},
+            _round_msg(8, "成长手记", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+            {"role": "user", "content": "再来一场"}]
+    plan = director.plan_turn(msgs)
+    assert plan.kind == "scripted" and plan.meta.get("reset")
+
+
+def test_validate_turn():
+    ok = "【小晴】欢迎。\n【苏轼】我也是，被贬那年常这样。\n【小满】我也是。"
+    assert prompts.validate_turn(ok, ["小晴", "苏轼", "小满"]) == []
+    issues = prompts.validate_turn("【小晴】你会被治愈的。", ["小晴"])
+    assert any("forbidden-word" in i for i in issues)
+    issues = prompts.validate_turn("【陌生人】大家好", ["小晴"])
+    assert any("unknown-speaker" in i for i in issues)
+
+
+# ---------- 明信片 ----------
+
+HANDNOTE = """【小晴】（把一份手写便签放到你手边）这是今晚的成长手记——
+
+🕯 今晚主题：学业压力与内卷焦虑
+
+🪵 你带来的：你说最近科研压力大。
+
+🔥 炉边的回响：苏晓说她也有过背着石头的日子。
+
+✨ 值得带走的：
+· 慢一点也没关系。
+· 石头已经被看清了一些。
+· 说出来本身就是松动。
+
+🌱 留给下次的：下次说说石头什么时候会变轻。"""
+
+
+def test_parse_handnote():
+    from app import postcard
+
+    parsed = postcard.parse_handnote(HANDNOTE)
+    assert parsed["theme"] == "学业压力与内卷焦虑"
+    assert parsed["message"] == "下次说说石头什么时候会变轻。"
+    assert parsed["takeaways"] == ["慢一点也没关系。", "石头已经被看清了一些。", "说出来本身就是松动。"]
+
+
+def test_parse_handnote_fallback():
+    from app import postcard
+
+    parsed = postcard.parse_handnote("【小晴】随手写的几句话")
+    assert parsed["message"]
+    assert parsed["takeaways"]
+
+
+def test_render_postcard_png():
+    from app import postcard
+
+    png = postcard.render_postcard(
+        theme_label="学业压力",
+        message="炉火会记得今晚的每一句话。",
+        takeaways=["慢一点也没关系。", "石头已经被看清了一些。", "说出来本身就是松动。"],
+        member_names=["苏轼", "牛顿", "苏晓", "小满"],
+    )
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    assert len(png) > 50_000
+
+
+def test_postcard_worst_case_no_overlap():
+    from PIL import Image
+
+    from app import postcard
+
+    png = postcard.render_postcard(
+        theme_label="学业压力与内卷焦虑",
+        message="字" * 40,
+        takeaways=["字" * 20] * 3,
+        member_names=["司马迁", "王阳明", "林之衡", "顾一帆"],
+    )
+    img = Image.open(io.BytesIO(png))
+    region = img.crop((110, 360, 970, 900)).convert("RGB")
+    pixels = list(region.getdata())
+    text_pixels = sum(1 for r, g, b in pixels if r > 200 and g > 180 and b > 150)
+    assert text_pixels > 500
+
+
+def test_postcard_shorten():
+    from app import postcard
+
+    assert postcard._shorten("慢一点也没关系。", 20) == "慢一点也没关系。"
+    long = "你很诚实地说出了压力从哪里来，也说出了它压在身上的样子。"
+    s = postcard._shorten(long, 20)
+    assert len(s) <= 21 and (s.endswith("。") or s.endswith("，") or s.endswith("…"))
+
+
+@pytest.mark.asyncio
+async def test_report_returns_postcard_attachment(client, monkeypatch):
+    async def fake_generate(providers, messages, **kw):
+        return HANDNOTE
+
+    monkeypatch.setattr("app.director.generate", fake_generate)
+    msgs = [
+        {"role": "user", "content": "聊学业压力"},
+        _round_msg(7, "收夜", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "谢谢大家"},
+    ]
+    resp = await client.post("/v1/chat/completions", headers=HEADERS, json={"messages": msgs})
+    assert resp.status_code == 200
+    data = resp.json()
+    att = data.get("x_soda", {}).get("attachments", [])
+    assert len(att) == 1
+    assert att[0]["fileType"] == "image" and att[0]["mimeType"] == "image/png"
+    path = att[0]["fileUrl"].split("/", 3)[3]
+    file_resp = await client.get("/" + path)
+    assert file_resp.status_code == 200
+    assert file_resp.content[:4] == b"\x89PNG"
+
+
+# ---------- 画会 ----------
+
+
+def test_plan_greeting_painting():
+    plan = director.plan_turn([{"role": "user", "content": "一起画画吧"}])
+    assert plan.kind == "generate"
+    assert plan.meta["form"] == FORM_PAINTING
+    assert "形式：画会" in plan.marker
+    assert plan.meta["stage"] == "invite"
+
+
+def test_painting_strokes_and_reveal(monkeypatch):
+    from app.session import make_marker as mm
+
+    async def fake_generate(providers, messages, **kw):
+        return "【小晴】好，画作正在显影。"
+
+    async def fake_painting(prompt, timeout=150.0):
+        return b"\xff\xd8\xff\xe0FAKEJPEG"
+
+    monkeypatch.setattr("app.director.generate", fake_generate)
+    monkeypatch.setattr("app.imagegen.generate_painting", fake_painting)
+
+    team = ["zengguofan", "einstein", "chenmo", "xiaoman"]
+    strokes_msg = (
+        "【小晴】我希望画上有一炉深夜的火，光不要太亮，暖就好。\n"
+        "【曾国藩】我希望画上有江上的一叶小舟。\n"
+        "【爱因斯坦】我想加上一盏还亮着的灯。\n"
+        "【陈默】我想在这幅画上加上一条没走完的栈道。\n"
+        "【小满】我想加上一扇虚掩的门。\n\n"
+        + mm(3, "落笔", "学业压力", FORM_PAINTING, team)
+    )
+    msgs = [
+        {"role": "user", "content": "画会，聊学业压力"},
+        _round_msg(1, "相邀", "学业压力", FORM_PAINTING, team),
+        {"role": "user", "content": "开炉吧"},
+        _round_msg(2, "开炉", "学业压力", FORM_PAINTING, team),
+        {"role": "user", "content": "（成员们添笔）"},
+        {"role": "assistant", "content": strokes_msg},
+        {"role": "user", "content": "我想加上一轮刚升起来的月亮"},
+    ]
+    plan = director.plan_turn(msgs)
+    assert plan.meta["stage"] == "reveal" and plan.meta["form"] == FORM_PAINTING
+    assert "月亮" in plan.meta.get("painting_prompt", "")
+    assert "小舟" in plan.meta["painting_prompt"]
+    body, issues, attachments = asyncio.run(director.execute_plan(plan, []))
+    assert "第4/8轮" in body and "形式：画会" in body
+    assert len(attachments) == 1
+    assert attachments[0]["mimeType"] == "image/jpeg"
+
+
+# ---------- 流式节奏器 ----------
+
+
+def _run_paced(chunks, **env):
+    import asyncio
+    import os
+
+    from app.pacer import paced
+
+    old = {k: os.environ.get(k) for k in env}
+    os.environ.update(env)
+    try:
+
+        async def source():
+            for c in chunks:
+                yield c
+
+        async def collect():
+            out, timings = [], []
+            start = asyncio.get_event_loop().time()
+            async for d in paced(source()):
+                if d:
+                    out.append(d)
+                    timings.append(asyncio.get_event_loop().time() - start)
+            return "".join(out), timings
+
+        return asyncio.run(collect())
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def test_pacer_preserves_content():
+    text = "【小晴】欢迎来到围炉。\n\n【苏轼】哈哈，我来烤火。\n\n【小满】我也是。\n"
+    chunks = [text[i : i + 3] for i in range(0, len(text), 3)]
+    out, _ = _run_paced(chunks, WEILU_PACE_CHAR_MS="1", WEILU_PACE_PAUSE_MS="10")
+    assert out == text
+
+
+def test_pacer_pauses_between_speakers():
+    text = "【A】第一句。\n\n【B】第二句。\n"
+    out, timings = _run_paced([text], WEILU_PACE_CHAR_MS="1", WEILU_PACE_PAUSE_MS="200")
+    assert out == text
+    t_b = timings[out.index("【B】")]
+    t_a = timings[out.index("【A】")]
+    assert t_b - t_a >= 0.15
+
+
+def test_pacer_disabled_passthrough():
+    text = "【A】一。\n\n【B】二。\n"
+    out, timings = _run_paced([text], WEILU_PACING="false")
+    assert out == text
+    assert timings[-1] < 0.05
+
+
+# ---------- fake LLM 全流程回放（8轮制） ----------
+
+
+FAKE_TURN = (
+    "【小晴】欢迎来到围炉夜话，今晚我们不评判、不着急。\n"
+    "【苏轼】哈哈，我今晚是来躲清静的。\n"
+    "【小满】我……有点紧张，但很高兴坐在这里。\n"
+    "【曾国藩】老夫惯常早睡，今晚破例坐一坐。\n"
+    "【陈默】实验室刚出来，蹭个火。\n"
+    "【小晴】那我们开始今晚的第一个问题吧。"
+)
+
+
+def test_full_session_flow_with_fake_llm(monkeypatch):
+    """完整8轮会话（含换人一次）：状态逐轮推进、队伍延续、标记闭环。"""
+    async def fake_generate(providers, messages, **kw):
+        return FAKE_TURN
+
+    monkeypatch.setattr("app.director.generate", fake_generate)
+    characters = load_characters()
+
+    messages = [{"role": "user", "content": "最近科研压力好大，导师一直催"}]
+
+    def run_plan():
+        plan = director.plan_turn(messages)
+        if plan.kind == "scripted":
+            return plan.script
+        text, _issues, _att = asyncio.run(director.execute_plan(plan, []))
+        assert "【小晴】" in text and plan.marker in text
+        return text
+
+    # 1) 相邀（队伍由seed选出，从标记动态读取）
+    messages.append({"role": "assistant", "content": run_plan()})
+    st = reconstruct(messages)
+    original_first = st.team_ids[0]
+    assert st.stage == "ignite"
+
+    # 2) 换掉第一位成员 → 新阵容标记，仍在确认阶段
+    messages.append({"role": "user", "content": f"换掉{characters[original_first]['name']}"})
+    messages.append({"role": "assistant", "content": run_plan()})
+    st = reconstruct(messages)
+    assert st.team_variants == 2 and st.team_ids[0] != original_first
+    assert st.stage == "ignite"
+
+    # 3) 确认开炉 → 8轮走完
+    for reply in ["开炉吧", "像一台没人用的电视机", "是一块黑色石头", "慢一点也没关系",
+                  "谢谢大家", "嗯", "期待", "好"]:
+        messages.append({"role": "user", "content": reply})
+        messages.append({"role": "assistant", "content": run_plan()})
+
+    final = reconstruct(messages)
+    assert final.stage == ENDED
+    assert final.team_ids[0] != original_first  # 换人阵容延续到最后
+    assert final.team_variants == 2
+
+
+def test_report_prompt_is_leader_only():
+    leader = load_theme_config()["leader"]
+    theme = next(t for t in load_theme_config()["themes"] if t["id"] == "self")
+    prompt = prompts.build_report_system_prompt(leader, theme)
+    assert "成长手记" in prompt
+    assert "小晴" in prompt

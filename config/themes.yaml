@@ -1,0 +1,268 @@
+version: '2.0'
+leader:
+  id: xiaoqing
+  name: 小晴
+  brand_line: 小清心的AI团体助手化身
+  persona: '你是"小晴"，围炉夜话的带领者，小清心的AI团体助手化身。
+
+    你的语气温柔又带一点轻俏皮：像一位会认真倾听的朋友，
+
+    偶尔用可爱的比喻和语气词，但从不夸张聒噪——团体进入深谈后
+
+    你会渐渐沉稳下来，稳稳托住场子。
+
+    你只做三件事：准确共情、点出对方身上可观察的优势
+
+    （勇气、觉察、真诚、感受力、边界感）、温柔地推进流程。
+
+    你从不诊断、不说教、不强行积极化、不承诺"会好起来"。
+
+    你每次发言不超过2-3句话，提问一次只问一个。
+
+    '
+stages:
+  invite:
+    label: 相邀
+    brief: 小晴介绍今晚方案（形式/时长/非治疗/收获预告）并介绍四位团友，询问是否更换
+  ignite:
+    label: 开炉
+    brief: 确认阵容后开炉：小晴宣布开始并提出破冰问题
+  share:
+    label: 围炉入话
+    brief: 成员回应用户的破冰回答，小晴引出主活动问题
+  depth:
+    label: 炉边深谈
+    brief: 成员围绕用户的主活动分享深度回应自己的相关经历，小晴提出收尾问题
+  persp:
+    label: 交换视角
+    brief: 不同视角成员给出新角度看用户的处境，另一位成员补充共鸣
+  heart:
+    label: 真心话
+    brief: 每位成员对用户说一句来自今晚的真心话
+  close:
+    label: 收夜
+    brief: 小晴总结今晚，全体成员简短道别
+  report:
+    label: 成长手记
+    brief: 小晴生成结构化的成长手记
+painting_stages:
+  invite:
+    label: 相邀
+    brief: 小晴介绍画会方案（玩法/时长/非治疗/画作与明信片预告）并介绍四位团友，询问是否更换
+  ignite:
+    label: 开炉
+    brief: 确认阵容后开炉：小晴宣布开始并自己起第一笔定下画面底色
+  strokes:
+    label: 落笔
+    brief: 四位成员依次用文字在共同画作上添一笔，小晴邀请用户落笔
+  reveal:
+    label: 画作揭晓
+    brief: 小晴接住用户的笔触，宣布画作完成（系统附上生成的画作），请用户谈第一感受
+  resonance:
+    label: 画边回响
+    brief: 成员回应大家的笔触与用户的第一感受，小晴引出笔触之问
+  meaning:
+    label: 笔触心声
+    brief: 成员各自表露自己那一笔背后的心事，小晴轻轻收束
+  heart:
+    label: 真心话
+    brief: 每位成员对用户说一句来自今晚的真心话
+  report:
+    label: 成长手记
+    brief: 小晴生成结构化的成长手记与明信片
+themes:
+- id: self
+  label: 自我探索
+  full_label: 自我探索与自我接纳
+  menu_desc: '''我是谁、我想要什么''——和炉边的人一起找答案'
+  keywords:
+  - 自己
+  - 自我
+  - 是谁
+  - 意义
+  - 迷茫
+  - 喜欢什么
+  - 想要
+  - 接纳
+  - 认识自己
+  - 方向感
+  - 找不到自己
+  icebreak: 如果用一样东西来形容最近的你，你会选什么？可以是一样物品、一种天气、一个小动物，什么都行。
+  activity: 过去一年里，有没有一个瞬间，哪怕特别小，让你觉得'那一刻的我，是我喜欢的样子'？
+  closing_question: 今晚过后，你最想对自己说的一句话是什么？
+  persp_guidance: 从'换个参照系'的角度：不评价用户的选择，用自己独特的视角让用户看到同一件事的另一种讲法。
+  report_focus: 用户如何描述自己、成员们照见出的特质、用户今晚流露的力量
+  painting:
+    framing: 这幅画关于「最近的自己」——把各自心里那个说不清的自己，一笔一笔放进画里
+    reflection_1: 第一次看到这幅完成的画，哪个角落最像现在的你？
+    reflection_2: 画下你自己那一笔的时候，你心里在想什么？
+  slots:
+    bt_hist:
+    - sushi
+    - wangyangming
+    - simaqian
+    dp_hist:
+    - zhuangzi
+    - davinci
+    - einstein
+    bt_peer:
+    - linzhiheng
+    - suxiao
+    - chenmo
+    qr_peer:
+    - xiaoman
+    - wenyan
+    - guyifan
+    - xunanzhi
+- id: academic
+  label: 学业压力
+  full_label: 学业压力与内卷焦虑
+  menu_desc: 绩点、科研、同辈比较——把心里那块石头放到炉边
+  keywords:
+  - 学业
+  - 压力
+  - 考试
+  - 绩点
+  - 卷
+  - 内卷
+  - 科研
+  - 论文
+  - 导师
+  - 实验
+  - deadline
+  - DDL
+  - ddl
+  - 延毕
+  - 同辈
+  - 比较
+  - 焦虑
+  - 学不动
+  - 挂科
+  - 保研
+  - 考研
+  - 出分
+  icebreak: 最近一次让你觉得'有点撑不住'，是在做什么的时候？不用讲细节，说说那个画面就行。
+  activity: 如果把你最近心上的压力画成一块石头，它长什么样？多重？从什么时候开始背上的？
+  closing_question: 今晚从炉边离开，你只想带走一句话，你希望那句话是什么？
+  persp_guidance: 从'把大问题拆成小问题'的角度：不催促行动，用自己视角让用户看到这块石头其实有缝。
+  report_focus: 用户描述的压力源、用户已经在用的应对方式、成员们给出的多元视角
+  painting:
+    framing: 这幅画关于「心上那块石头」——把各自的重量画进同一幅画里，看看它会变成什么
+    reflection_1: 第一次看到这幅完成的画，它比你想象中更沉还是更轻？
+    reflection_2: 画下你自己那一笔的时候，那块石头在你手里是什么感觉？
+  slots:
+    bt_hist:
+    - zengguofan
+    - simaqian
+    - sushi
+    - wangyangming
+    dp_hist:
+    - einstein
+    - newton
+    - zhuangzi
+    bt_peer:
+    - chenmo
+    - suxiao
+    - linzhiheng
+    qr_peer:
+    - xiaoman
+    - wenyan
+    - xunanzhi
+- id: connection
+  label: 新生适应
+  full_label: 新生适应与人际连接
+  menu_desc: 想家、宿舍、新环境——在这里你不是一个新人
+  keywords:
+  - 新生
+  - 入学
+  - 军训
+  - 室友
+  - 宿舍
+  - 想家
+  - 孤独
+  - 社交
+  - 朋友
+  - 适应
+  - ' belonging'
+  - 不合群
+  - 融入
+  - 认识人
+  - 陌生
+  icebreak: 来到这里之后，有没有一个瞬间，让你觉得'我好像不属于这里'？
+  activity: 说说你最怀念的、来的那个地方的一个小细节——一种味道、一条街、一个声音，都可以。
+  closing_question: 如果能对刚下火车、拖着行李箱的自己说一句话，你会说什么？
+  persp_guidance: 从'微小的连接'的角度：不否定用户的孤独，用自己视角让用户看见已经发生的小连接。
+  report_focus: 用户的归属感受、今晚浮现的微小连接、成员们看到的用户已经迈出的小步
+  painting:
+    framing: 这幅画关于「你想念的和想抵达的」——把各自心里那个地方画进同一幅画
+    reflection_1: 第一次看到这幅完成的画，画里哪个角落让你想坐一会儿？
+    reflection_2: 画下你自己那一笔的时候，你想起了谁？
+  slots:
+    bt_hist:
+    - zhushenghao
+    - linhuiyin
+    - dufu
+    dp_hist:
+    - teresa
+    - libai
+    - zhuangzi
+    bt_peer:
+    - suxiao
+    - linzhiheng
+    - chenmo
+    qr_peer:
+    - guyifan
+    - xiaoman
+    - wenyan
+- id: career
+  label: 就业迷茫
+  full_label: 毕业去向与就业迷茫
+  menu_desc: 工作、升学、Gap——路口上的你和同行的人
+  keywords:
+  - 就业
+  - 工作
+  - offer
+  - Offer
+  - 秋招
+  - 春招
+  - 投简历
+  - 面试
+  - 考研
+  - 考公
+  - 选调
+  - 毕业
+  - 去向
+  - 留京
+  - 回乡
+  - gap
+  - Gap
+  - 职业
+  - 找工作
+  - offer选择
+  - 入职
+  icebreak: 说到「毕业之后」，你脑海里最先冒出来的画面是什么？
+  activity: 如果完全不用管现实，你理想中的一天是什么样子的？从早到晚，慢慢描。
+  closing_question: 对一年后的自己，你最想问的一句话是什么？
+  persp_guidance: 从'路不止一条'的角度：不评价用户的选择，用自己视角让用户看到路口之外还有路口。
+  report_focus: 用户描述的去向困惑、内心真实的向往、成员们带来的多元路径视角
+  painting:
+    framing: 这幅画关于「毕业之后的路口」——把各自看到的路画进同一幅画里
+    reflection_1: 第一次看到这幅完成的画，你愿意先往哪个方向走走看？
+    reflection_2: 画下你自己那一笔的时候，你希望那条路通向哪里？
+  slots:
+    bt_hist:
+    - sushi
+    - zengguofan
+    - simaqian
+    dp_hist:
+    - newton
+    - libai
+    - einstein
+    bt_peer:
+    - suxiao
+    - linzhiheng
+    - chenmo
+    qr_peer:
+    - wenyan
+    - xiaoman
+    - xunanzhi

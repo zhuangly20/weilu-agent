@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 围炉夜话 logo：深夜蓝底 + 暖橙炉火 -->
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="62%" r="55%">
+      <stop offset="0%" stop-color="#ffb347"/>
+      <stop offset="100%" stop-color="#ff7b24" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="#1c2431"/>
+  <circle cx="256" cy="320" r="200" fill="url(#glow)" opacity="0.55"/>
+  <!-- 火焰 -->
+  <path d="M256 150c34 52 78 84 78 138a78 78 0 0 1-156 0c0-54 44-86 78-138z" fill="#ff8c2e"/>
+  <path d="M256 208c20 32 46 52 46 86a46 46 0 0 1-92 0c0-34 26-54 46-86z" fill="#ffc46b"/>
+  <!-- 柴 -->
+  <rect x="150" y="342" width="212" height="26" rx="13" fill="#8a5a34" transform="rotate(-8 256 355)"/>
+  <rect x="150" y="352" width="212" height="26" rx="13" fill="#a06a3f" transform="rotate(7 256 365)"/>
+  <!-- 星 -->
+  <circle cx="120" cy="110" r="5" fill="#e8e2d0"/>
+  <circle cx="392" cy="90" r="4" fill="#e8e2d0"/>
+  <circle cx="420" cy="150" r="3" fill="#e8e2d0"/>
+  <circle cx="96" cy="180" r="3" fill="#e8e2d0"/>
+</svg>

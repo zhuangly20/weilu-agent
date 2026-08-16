@@ -1,0 +1,49 @@
+# 围炉夜话 Nginx 配置示例
+# 方案A（推荐）：新子域名 weilu.example.com，新增一个 server 块
+# 方案B：复用现有域名，在现有 server 块里加 location /weilu/（见文件末尾注释）
+# SSE 需要关闭缓冲，超时给足（团体一轮生成可达 60s+）
+
+# ── 方案A：新子域名 server 块 ──────────────────────────────
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name weilu.example.com;          # TODO: 换成实际子域名
+
+    # TODO: 证书路径（certbot 签发后替换，或复用通配符证书）
+    ssl_certificate     /etc/letsencrypt/live/weilu.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/weilu.example.com/privkey.pem;
+
+    # 清小搭网关超时 120s；代理超时对齐
+    proxy_read_timeout 120s;
+    proxy_send_timeout 120s;
+
+    location / {
+        proxy_pass http://127.0.0.1:8200;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        # SSE 关键：关闭缓冲
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_set_header Connection "";
+    }
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name weilu.example.com;
+    return 301 https://$host$request_uri;
+}
+
+# ── 方案B：复用现有域名（粘贴到已有 443 server 块内）────────
+# location /weilu/ {
+#     proxy_pass http://127.0.0.1:8200/;     # 注意结尾斜杠：/weilu/v1/xx -> /v1/xx
+#     proxy_http_version 1.1;
+#     proxy_set_header Host $host;
+#     proxy_buffering off;
+#     proxy_cache off;
+#     proxy_read_timeout 120s;
+#     proxy_send_timeout 120s;
+# }
+# 此时清小搭接入向导 baseUrl 填： https://现有域名/weilu/v1
