@@ -38,8 +38,8 @@ PAGE = """<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>围炉夜话</h1><span class="tag">本地测试页</span>
-  <input id="key" value="sk-weilu-dev-key" title="API Key">
+  <h1>围炉夜话</h1><span class="tag">测试页</span>
+  <input id="key" placeholder="API Key（sk-weilu-开头）" title="API Key">
 </header>
 <main id="log">
   <div class="marker">—— 直接发一句话开始，例如「最近科研压力好大」或「画会，聊学业压力」——</div>
@@ -52,6 +52,9 @@ PAGE = """<!DOCTYPE html>
 const log = document.getElementById('log');
 const input = document.getElementById('input');
 const btn = document.getElementById('btn');
+const keyBox = document.getElementById('key');
+keyBox.value = localStorage.getItem('weilu_key') || 'sk-weilu-dev-key';
+keyBox.addEventListener('change', () => localStorage.setItem('weilu_key', keyBox.value.trim()));
 let messages = [];
 
 function bubble(role, who, cls) {
