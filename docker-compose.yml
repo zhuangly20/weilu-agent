@@ -4,7 +4,8 @@ services:
     container_name: weilu-agent
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8200:8200"
+      # 绑定在 docker0 网关：史记的nginx容器经 172.17.0.1 反代进来，公网不可直连
+      - "172.17.0.1:8200:8200"
     env_file:
       - .env
     healthcheck:

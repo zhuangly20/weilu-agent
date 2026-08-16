@@ -50,7 +50,7 @@ echo ">>> 4/6 构建并启动容器"
 cd "$BASE"
 docker compose up -d --build 2>/dev/null || docker-compose up -d --build
 sleep 6
-curl -sf -m 10 http://127.0.0.1:8200/healthz >/dev/null || { echo "✗ 健康检查失败，容器日志："; docker logs weilu-agent --tail 40; exit 1; }
+curl -sf -m 10 http://172.17.0.1:8200/healthz >/dev/null || { echo "✗ 健康检查失败，容器日志："; docker logs weilu-agent --tail 40; exit 1; }
 echo "✓ 容器运行正常"
 
 echo ">>> 5/6 Nginx + HTTPS 证书"
