@@ -141,7 +141,7 @@ def render_postcard(
 
     x = 110
     # 标题
-    draw.text((x, 110), "围 炉 夜 话", font=_font(76), fill=PAPER)
+    draw.text((x, 110), "清 心 圆 桌", font=_font(76), fill=PAPER)
     sub = f"{theme_label} · {today.month}月{today.day}日"
     draw.text((x, 224), sub, font=_font(36), fill=PAPER_DIM)
     draw.line([(x, 306), (W - 300, 306)], fill=(*GOLD, 140), width=2)

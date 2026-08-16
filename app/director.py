@@ -1,4 +1,4 @@
-"""导演编排器：8轮制流程（相邀→开炉→6轮正式）+ 换人 + 组队 + 历史压缩。
+"""导演编排器：8轮制流程（相邀→开场→6轮正式）+ 换人 + 组队 + 历史压缩。
 
 plan_turn() 是纯函数（可测试），返回本轮计划；
 执行（LLM调用/流式/生图/明信片）由 main.py 按 plan 进行。
@@ -138,7 +138,7 @@ def build_attachments(plan: TurnPlan, body: str) -> list[dict]:
         from . import files, postcard
 
         parsed = postcard.parse_handnote(body)
-        theme_label = str(plan.meta.get("theme_label") or parsed.get("theme") or "围炉夜话")
+        theme_label = str(plan.meta.get("theme_label") or parsed.get("theme") or "清心圆桌")
         png = postcard.render_postcard(
             theme_label=theme_label,
             message=parsed["message"],
@@ -150,7 +150,7 @@ def build_attachments(plan: TurnPlan, body: str) -> list[dict]:
         return [
             {
                 "fileUrl": f"{base}/files/{token}",
-                "fileName": "围炉夜话·明信片.png",
+                "fileName": "清心圆桌·明信片.png",
                 "fileType": "image",
                 "mimeType": "image/png",
                 "fileSize": len(png),
@@ -181,7 +181,7 @@ def _image_attachment(img_bytes: bytes) -> list[dict]:
     return [
         {
             "fileUrl": f"{base}/files/{token}",
-            "fileName": "围炉画会·共创画作.jpg",
+            "fileName": "圆桌画会·共创画作.jpg",
             "fileType": "image",
             "mimeType": "image/jpeg",
             "fileSize": len(img_bytes),
@@ -246,7 +246,7 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
         team = build_team(theme, characters, f"{seed_text}|{theme['id']}")
     team_ids = [m["id"] for m in team]
 
-    # ---- 第2轮·定席分支（换人 / 确认开炉 / 没听清） ----
+    # ---- 第2轮·定席分支（换人 / 确认开场 / 没听清） ----
     if state.stage == "ignite":
         swap_slots = parse_swap_request(last_user, [m["name"] for m in team])
         swaps_used = state.team_variants - 1
@@ -288,7 +288,7 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
                       "crisis": crisis},
             )
         if is_confirm(last_user) or len(last_user.strip()) >= GREETING_MIN_LEN:
-            # 明确确认，或实质性发言（视为默许阵容、把话接进开炉）
+            # 明确确认，或实质性发言（视为默许阵容、把话接进开场）
             label_cfg = themes_cfg.get("painting_stages", {}) if state.form == FORM_PAINTING else themes_cfg["stages"]
             marker = make_marker(2, label_cfg["ignite"]["label"], theme["label"], state.form, team_ids)
             system_prompt = prompts.build_turn_system_prompt(

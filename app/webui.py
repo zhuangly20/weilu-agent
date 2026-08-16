@@ -8,7 +8,7 @@ PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>围炉夜话 · 小清心</title>
+<title>清心圆桌 · 小清心</title>
 <link rel="icon" href="/assets/img/xqx-logo.jpg">
 <style>
   :root{
@@ -72,13 +72,13 @@ PAGE = """<!DOCTYPE html>
 <body>
 <header>
   <img class="logo" src="/assets/img/xqx-logo.jpg" alt="小清心">
-  <h1>围炉夜话 · <b>小清心</b></h1><span class="tag">AI团体支持空间</span>
+  <h1>清心圆桌 · <b>小清心</b></h1><span class="tag">AI团体支持空间</span>
   <input id="key" placeholder="API Key（sk-weilu-开头）" title="API Key">
 </header>
 <main id="log">
   <div class="welcome">
     <img src="/assets/img/xqx-mascots.jpg" alt="清清华华心心理理">
-    <div class="t">和小晴一起，围炉开聊 🕯️</div>
+    <div class="t">和小晴一起，圆桌开聊 ☀️</div>
     <div class="d">试试发「最近科研压力好大」，或「画会，聊学业压力」</div>
   </div>
 </main>
@@ -136,7 +136,7 @@ function renderBlock(text, el){
       d.innerHTML = '<span class="spk ' + cls + '">【' + esc(m[1]) + '】</span><span class="body"></span>';
       d.querySelector('.body').textContent = m[2];
       el.appendChild(d);
-    } else if (ln.trim().startsWith('（围炉进度')){
+    } else if (ln.trim().startsWith('（圆桌进度')){
       const d = document.createElement('div');
       d.style.cssText = 'color:var(--dim);font-size:12px;margin:12px 0 2px';
       d.textContent = ln.trim();

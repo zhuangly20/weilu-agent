@@ -3,7 +3,7 @@ leader:
   id: xiaoqing
   name: 小晴
   brand_line: 小清心的AI团体助手化身
-  persona: '你是"小晴"，围炉夜话的带领者，小清心的AI团体助手化身。
+  persona: '你是"小晴"，清心圆桌的带领者，小清心的AI团体助手化身。
 
     你的语气温柔又带一点轻俏皮：像一位会认真倾听的朋友，
 
@@ -25,10 +25,10 @@ stages:
     label: 相邀
     brief: 小晴介绍今晚方案（形式/时长/非治疗/收获预告）并介绍四位团友，询问是否更换
   ignite:
-    label: 开炉
-    brief: 确认阵容后开炉：小晴宣布开始并提出破冰问题
+    label: 开场
+    brief: 确认阵容后开场：小晴宣布开始并提出破冰问题
   share:
-    label: 围炉入话
+    label: 圆桌入话
     brief: 成员回应用户的破冰回答，小晴引出主活动问题
   depth:
     label: 炉边深谈
@@ -50,8 +50,8 @@ painting_stages:
     label: 相邀
     brief: 小晴介绍画会方案（玩法/时长/非治疗/画作与明信片预告）并介绍四位团友，询问是否更换
   ignite:
-    label: 开炉
-    brief: 确认阵容后开炉：小晴宣布开始并自己起第一笔定下画面底色
+    label: 开场
+    brief: 确认阵容后开场：小晴宣布开始并自己起第一笔定下画面底色
   strokes:
     label: 落笔
     brief: 四位成员依次用文字在共同画作上添一笔，小晴邀请用户落笔

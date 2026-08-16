@@ -1,13 +1,13 @@
 """会话状态重建：从消息历史解析进度标记（协议无用户ID，无状态设计）。
 
 每轮 assistant 回复末尾的程序化标记行（v3，8轮制）：
-（围炉进度：第{n}/8轮 · {stage_label}｜主题：{theme}｜形式：画会?｜炉友：id1,id2,id3,id4）
+（圆桌进度：第{n}/8轮 · {stage_label}｜主题：{theme}｜形式：画会?｜桌友：id1,id2,id3,id4）
 - 既是进度条，也是状态重建锚点（含队伍ID：换人后跨轮持久）
 - 换人轮重复发"第1/8轮 · 相邀"标记（阵容更新、仍在确认阶段）
 
 流程（主题×形式）：
   1 相邀（方案介绍+团友亮相+换人询问；换人后重发）
-  2 开炉（确认后：夜话=破冰问题 / 画会=小晴起第一笔）
+  2 开场（确认后：夜话=破冰问题 / 画会=小晴起第一笔）
   夜话 3-8：入话 → 深谈 → 视角 → 真心话 → 收夜 → 手记
   画会 3-8：落笔 → 揭晓(生图) → 回响 → 心声 → 真心话 → 手记
 """
@@ -56,10 +56,10 @@ SWAP_KEYWORD_RE = re.compile(r"换掉|换一个|换人|不要.{0,6}$|不喜欢|�
 CONFIRM_KEYWORD_RE = re.compile(r"开始|好的|可以|没问题|就这样|就他们|不换|不用换|开炉|开始吧|好呀|好嘞|OK|ok|冲|来吧|嗯")
 
 MARKER_RE = re.compile(
-    r"（围炉进度：第\s*(\d+)\s*/\s*8\s*轮\s*·\s*([^｜）]+)"
+    r"（圆桌进度：第\s*(\d+)\s*/\s*8\s*轮\s*·\s*([^｜）]+)"
     r"｜主题：([^）｜]+)"
     r"(?:｜形式：([^）｜]+))?"
-    r"(?:｜炉友：([^）]+))?）"
+    r"(?:｜桌友：([^）]+))?）"
 )
 
 GREETING = "greeting"
@@ -250,9 +250,9 @@ def make_marker(
     form: str = FORM_CHAT,
     team_ids: list[str] | None = None,
 ) -> str:
-    base = f"（围炉进度：第{round_no}/{TOTAL_ROUNDS}轮 · {stage_label}｜主题：{theme_label}"
+    base = f"（圆桌进度：第{round_no}/{TOTAL_ROUNDS}轮 · {stage_label}｜主题：{theme_label}"
     if form == FORM_PAINTING:
         base += f"｜形式：{PAINTING_LABEL}"
     if team_ids:
-        base += "｜炉友：" + ",".join(team_ids)
+        base += "｜桌友：" + ",".join(team_ids)
     return base + "）"

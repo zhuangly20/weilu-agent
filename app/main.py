@@ -1,4 +1,4 @@
-"""围炉夜话 · 清小搭标准协议接入服务（OpenAI 兼容）。"""
+"""清心圆桌 · 清小搭标准协议接入服务（OpenAI 兼容）。"""
 from __future__ import annotations
 
 import logging
@@ -18,7 +18,7 @@ logger = logging.getLogger("weilu")
 
 app = FastAPI(title="weilu-agent", version="1.0.0")
 
-PROBE_REPLY = "你好，围炉已生火。"
+PROBE_REPLY = "你好，小晴在呢。"
 
 
 def check_auth(authorization: str | None) -> None:

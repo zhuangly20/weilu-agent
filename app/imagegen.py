@@ -1,4 +1,4 @@
-"""文生图（围炉画会）：把大家的文字笔触合成为一幅画。
+"""文生图（圆桌画会）：把大家的文字笔触合成为一幅画。
 
 供应商：OpenAI 兼容 /images/generations 端点（当前 xcode.best 的 gpt-image-2）。
 返回压缩后的 JPEG 字节；任何失败返回 None（上层降级为纯文字画会，不打断流程）。
@@ -33,7 +33,7 @@ def build_painting_prompt(framing: str, contributions: list[str], user_contribut
     if user_contribution:
         parts.append(f"画面中必须重点体现：{user_contribution}。")
     parts.append(
-        "温暖的治愈系插画风格，深夜色调中透着暖光，笔触柔和，元素在画面中和谐共存，"
+        "温暖的治愈系插画风格，明亮柔和的暖色中透着暖光，笔触柔和，元素在画面中和谐共存，"
         "富有想象力与情感温度。画面中不出现任何文字。"
     )
     return "".join(parts)

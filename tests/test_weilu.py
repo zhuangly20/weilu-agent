@@ -1,4 +1,4 @@
-"""围炉夜话测试：协议符合性（对照接入指南§8）+ 状态机 + 安全 + 换人 + 全流程回放。"""
+"""清心圆桌测试：协议符合性（对照接入指南§8）+ 状态机 + 安全 + 换人 + 全流程回放。"""
 from __future__ import annotations
 
 import asyncio
@@ -159,12 +159,12 @@ def _round_msg(round_no, label, theme, form=FORM_CHAT, team_ids=None):
 
 
 def test_marker_v3_roundtrip():
-    m = make_marker(3, "围炉入话", "学业压力", FORM_CHAT, TEAM_ACADEMIC)
+    m = make_marker(3, "圆桌入话", "学业压力", FORM_CHAT, TEAM_ACADEMIC)
     parsed = None
     from app.session import parse_marker
 
     parsed = parse_marker("xx\n\n" + m)
-    assert parsed[0] == 3 and parsed[1] == "围炉入话"
+    assert parsed[0] == 3 and parsed[1] == "圆桌入话"
     assert parsed[2] == "学业压力" and parsed[3] == FORM_CHAT
     assert parsed[4] == TEAM_ACADEMIC
     # 画会形式
@@ -182,7 +182,7 @@ def test_reconstruct_stages_and_team():
     assert st.team_ids == TEAM_ACADEMIC and st.team_variants == 1
 
     msgs.append({"role": "user", "content": "开炉吧"})
-    msgs.append(_round_msg(2, "开炉", "学业压力", FORM_CHAT, TEAM_ACADEMIC))
+    msgs.append(_round_msg(2, "开场", "学业压力", FORM_CHAT, TEAM_ACADEMIC))
     st = reconstruct(msgs)
     assert st.stage == "share" and st.next_round == 3
 
@@ -298,8 +298,8 @@ def test_plan_greeting_substantive_starts_invite():
     plan = director.plan_turn([{"role": "user", "content": "最近感觉自己特别迷茫，不知道想要什么"}])
     assert plan.kind == "generate"
     assert plan.meta["stage"] == "invite" and plan.meta["round"] == 1
-    assert "围炉进度：第1/8轮" in plan.marker and "相邀" in plan.marker
-    assert "炉友：" in plan.marker
+    assert "圆桌进度：第1/8轮" in plan.marker and "相邀" in plan.marker
+    assert "桌友：" in plan.marker
     assert plan.meta["theme"] == "self"
     assert len(plan.meta["team"]) == 4
     # 相邀轮只有小晴发言
@@ -315,7 +315,7 @@ def test_plan_seat_confirm_ignites():
     plan = director.plan_turn(msgs)
     assert plan.kind == "generate"
     assert plan.meta["stage"] == "ignite" and plan.meta["round"] == 2
-    assert "第2/8轮" in plan.marker and "开炉" in plan.marker
+    assert "第2/8轮" in plan.marker and "开场" in plan.marker
     assert plan.meta["team"] == ["曾国藩", "爱因斯坦", "陈默", "小满"]
 
 
@@ -343,7 +343,7 @@ def test_plan_swap_flow():
     assert len(plan.meta["arriving"]) == 1
     # 标记仍是第1轮·相邀（新阵容），仍在确认阶段
     assert "第1/8轮 · 相邀" in plan.marker
-    new_ids = plan.marker.split("炉友：")[1].rstrip("）").split(",")
+    new_ids = plan.marker.split("桌友：")[1].rstrip("）").split(",")
     assert new_ids[0] != "zengguofan"
     assert "司马迁" in plan.system_prompt  # 新成员人设已注入（同槽位替补）
 
@@ -374,7 +374,7 @@ def test_plan_mid_session_uses_marker_team():
         {"role": "user", "content": "换掉爱因斯坦"},
         _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "开炉吧"},
-        _round_msg(2, "开炉", "学业压力", FORM_CHAT, swapped),
+        _round_msg(2, "开场", "学业压力", FORM_CHAT, swapped),
         {"role": "user", "content": "像一台一直开着但没人用的电视机"},
     ]
     plan = director.plan_turn(msgs)
@@ -535,7 +535,7 @@ def test_painting_strokes_and_reveal(monkeypatch):
         {"role": "user", "content": "画会，聊学业压力"},
         _round_msg(1, "相邀", "学业压力", FORM_PAINTING, team),
         {"role": "user", "content": "开炉吧"},
-        _round_msg(2, "开炉", "学业压力", FORM_PAINTING, team),
+        _round_msg(2, "开场", "学业压力", FORM_PAINTING, team),
         {"role": "user", "content": "（成员们添笔）"},
         {"role": "assistant", "content": strokes_msg},
         {"role": "user", "content": "我想加上一轮刚升起来的月亮"},
@@ -612,7 +612,7 @@ def test_pacer_disabled_passthrough():
 
 
 FAKE_TURN = (
-    "【小晴】欢迎来到围炉夜话，今晚我们不评判、不着急。\n"
+    "【小晴】欢迎来到清心圆桌，今晚我们不评判、不着急。\n"
     "【苏轼】哈哈，我今晚是来躲清静的。\n"
     "【小满】我……有点紧张，但很高兴坐在这里。\n"
     "【曾国藩】老夫惯常早睡，今晚破例坐一坐。\n"
