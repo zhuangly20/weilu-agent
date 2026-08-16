@@ -2,9 +2,10 @@
 # 围炉夜话 · 服务器一键部署脚本（在有 Docker 的服务器上运行）
 #
 # 用法：
-#   bash setup-on-server.sh <gitee仓库URL> <子域名> [安装目录，默认/opt/weilu-agent]
+#   bash setup-on-server.sh <git仓库URL> <子域名> [安装目录，默认/opt/weilu-agent]
 # 例：
-#   bash setup-on-server.sh https://gitee.com/zhuangly20/weilu-agent.git weilu.example.com
+#   bash setup-on-server.sh git@github.com:zhuangly20/weilu-agent.git weilu.example.com
+#   bash setup-on-server.sh https://github.com/zhuangly20/weilu-agent.git weilu.example.com
 #
 # 前置条件：
 #   1. DNS已把子域名指向本服务器

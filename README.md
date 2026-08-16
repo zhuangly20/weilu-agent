@@ -58,7 +58,15 @@ cp .env.example .env                                   # 填入模型key
 
 ## 部署（与史记同服务器共存）
 
-1. 上传本目录到服务器（如 `/opt/weilu-agent`），`cp .env.example .env` 填好密钥。
+推荐用 `deploy/setup-on-server.sh` 一键完成（克隆→.env检查→容器→Nginx→certbot→自测，末尾打印 baseUrl 与 API Key）：
+
+```bash
+bash deploy/setup-on-server.sh git@github.com:zhuangly20/weilu-agent.git weilu.你的域名.com
+```
+
+手动步骤等价于：
+
+1. 克隆仓库到服务器（如 `/opt/weilu-agent`），上传本地 `.env` 到该目录（含模型key，不入仓库）。
 2. `docker compose up -d --build`（容器只监听 127.0.0.1:8200，不直接暴露公网）。
 3. Nginx：参照 `deploy/nginx-weilu.conf.example`——新子域名或现有域名加 `location /weilu/` 均可（SSE 必须关缓冲、超时≥120s）。
 4. 自测（对照接入指南§8）：
