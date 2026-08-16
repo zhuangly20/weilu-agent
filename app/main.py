@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import director, protocol
 from .config import load_settings
@@ -33,6 +35,9 @@ async def healthz():
 
 
 register_webui(app)
+
+_ASSETS = Path(__file__).resolve().parent.parent / "assets"
+app.mount("/assets", StaticFiles(directory=str(_ASSETS)), name="assets")
 
 
 @app.get("/files/{token}")

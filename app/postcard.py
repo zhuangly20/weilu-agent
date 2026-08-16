@@ -12,14 +12,17 @@ FONT_PATH = "assets/fonts/LXGWWenKai-Regular.ttf"
 
 W, H = 1080, 1440
 
-# 夜色系
-NIGHT_TOP = (22, 30, 46)
-NIGHT_BOTTOM = (33, 44, 66)
-PAPER = (245, 234, 216)       # 暖白
-PAPER_DIM = (196, 186, 168)   # 次级文字
-FIRE_ORANGE = (255, 140, 46)
+# 小清心暖色明亮系
+CREAM_TOP = (255, 249, 240)
+CREAM_BOTTOM = (255, 231, 205)
+INK = (90, 70, 54)            # 主文字·暖棕
+PAPER = INK
+PAPER_DIM = (166, 137, 110)   # 次级文字
+FIRE_ORANGE = (240, 96, 60)   # 珊瑚橘
 FIRE_YELLOW = (255, 196, 107)
-GOLD = (230, 190, 120)
+GOLD = (232, 154, 43)         # 暖金
+PURPLE = (155, 126, 222)      # 小清心紫
+SOFT_PINK = (244, 156, 187)   # 小清心粉
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:
@@ -70,20 +73,22 @@ def _draw_background(img: Image.Image) -> None:
     draw = ImageDraw.Draw(img)
     for y in range(H):
         t = y / H
-        c = tuple(int(NIGHT_TOP[i] + (NIGHT_BOTTOM[i] - NIGHT_TOP[i]) * t) for i in range(3))
+        c = tuple(int(CREAM_TOP[i] + (CREAM_BOTTOM[i] - CREAM_TOP[i]) * t) for i in range(3))
         draw.line([(0, y), (W, y)], fill=c)
-    # 星星（固定随机种子，每张卡片星空一致）
+    # 暖色小点缀（固定种子，风格取自小清心四色）
     rng = random.Random(2026)
-    for _ in range(90):
-        x, y = rng.randint(0, W), rng.randint(0, int(H * 0.55))
-        r = rng.choice([1, 1, 2, 2, 3])
-        alpha = rng.randint(70, 200)
-        draw.ellipse([x - r, y - r, x + r, y + r], fill=(232, 226, 208, alpha))
-    # 底部炉火光晕（单独一层高斯模糊）
+    palette = [GOLD, PURPLE, SOFT_PINK, FIRE_ORANGE]
+    for i in range(46):
+        x, y = rng.randint(0, W), rng.randint(0, int(H * 0.6))
+        r = rng.choice([3, 4, 5, 6])
+        color = palette[i % 4]
+        alpha = rng.randint(38, 80)
+        draw.ellipse([x - r, y - r, x + r, y + r], fill=(*color, alpha))
+    # 底部暖阳光晕
     glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     gdraw = ImageDraw.Draw(glow)
-    gdraw.ellipse([W // 2 - 330, H - 560, W // 2 + 330, H - 40], fill=(255, 140, 46, 90))
-    gdraw.ellipse([W // 2 - 170, H - 430, W // 2 + 170, H - 160], fill=(255, 190, 100, 110))
+    gdraw.ellipse([W // 2 - 340, H - 560, W // 2 + 340, H - 40], fill=(255, 196, 107, 80))
+    gdraw.ellipse([W // 2 - 170, H - 420, W // 2 + 170, H - 150], fill=(255, 158, 102, 70))
     img.alpha_composite(glow.filter(ImageFilter.GaussianBlur(60)))
 
 
@@ -128,7 +133,7 @@ def render_postcard(
     _draw_background(img)
     draw = ImageDraw.Draw(img)
     # 明信片内框
-    draw.rounded_rectangle([44, 44, W - 44, H - 44], radius=28, outline=(230, 190, 120, 90), width=3)
+    draw.rounded_rectangle([44, 44, W - 44, H - 44], radius=28, outline=(*GOLD, 120), width=3)
     # 邮票角标
     draw.rounded_rectangle([W - 250, 78, W - 88, 240], radius=10, outline=GOLD, width=3)
     draw.text((W - 169, 120), "围", font=_font(64), fill=GOLD, anchor="ma")
@@ -139,7 +144,7 @@ def render_postcard(
     draw.text((x, 110), "围 炉 夜 话", font=_font(76), fill=PAPER)
     sub = f"{theme_label} · {today.month}月{today.day}日"
     draw.text((x, 224), sub, font=_font(36), fill=PAPER_DIM)
-    draw.line([(x, 306), (W - 300, 306)], fill=(230, 190, 120, 120), width=2)
+    draw.line([(x, 306), (W - 300, 306)], fill=(*GOLD, 140), width=2)
 
     y = 360
     draw.text((x, y), "小晴的寄语", font=_font(40), fill=GOLD)
@@ -162,7 +167,7 @@ def render_postcard(
     draw.text((W // 2, H - 108), f"小晴 与 {'、'.join(member_names)}", font=_font(34),
               fill=PAPER_DIM, anchor="ma")
     draw.text((W // 2, H - 58), "—— 炉火不熄，随时回来 ——", font=_font(26),
-              fill=(150, 140, 124), anchor="ma")
+              fill=PAPER_DIM, anchor="ma")
 
     buf = io.BytesIO()
     img.convert("RGB").save(buf, format="PNG", optimize=True)

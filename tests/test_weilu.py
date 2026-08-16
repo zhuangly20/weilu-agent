@@ -460,9 +460,10 @@ def test_postcard_worst_case_no_overlap():
         member_names=["司马迁", "王阳明", "林之衡", "顾一帆"],
     )
     img = Image.open(io.BytesIO(png))
+    # 暖色明亮版：浅底深字——文字区应有足量暖棕墨色像素
     region = img.crop((110, 360, 970, 900)).convert("RGB")
     pixels = list(region.getdata())
-    text_pixels = sum(1 for r, g, b in pixels if r > 200 and g > 180 and b > 150)
+    text_pixels = sum(1 for r, g, b in pixels if r < 160 and g < 140 and b < 120)
     assert text_pixels > 500
 
 
