@@ -1,6 +1,8 @@
 services:
   weilu:
-    build: .
+    build:
+      context: .
+      network: host
     container_name: weilu-agent
     restart: unless-stopped
     ports:
