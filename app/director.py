@@ -6,6 +6,7 @@ plan_turn() 是纯函数（可测试），返回本轮计划；
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -40,11 +41,11 @@ GREETING_MIN_LEN = 8  # 低于此长度的开场（如"你好"）走菜单，实
 
 # 每轮期望的最少成员发言数（校验用；不达标触发非流式重试）
 STAGE_MIN_MEMBERS = {
-    "invite": 0, "ignite": 2, "share": 2, "depth": 2,
+    "invite": 4, "ignite": 4, "share": 2, "depth": 2,
     "persp": 2, "heart": 4, "close": 4, "report": 0,
 }
 STAGE_MIN_MEMBERS_PAINTING = {
-    "invite": 0, "ignite": 0, "strokes": 4, "reveal": 0,
+    "invite": 4, "ignite": 2, "strokes": 4, "reveal": 0,
     "resonance": 3, "meaning": 2, "heart": 4, "report": 0,
 }
 
@@ -232,8 +233,16 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
         if wants_reset(last_user):
             return TurnPlan(kind="scripted", script=prompts.GREETING_TEXT,
                             meta={"stage": GREETING, "reset": True})
-        return TurnPlan(kind="scripted", script=prompts.ENDED_TEXT,
-                        meta={"stage": ENDED})
+        # 散场后的追问：小晴单独应答（无标记 → 状态保持 ENDED）
+        theme_label = state.theme_label_raw or "清心圆桌"
+        digest = build_digest(messages[:-1])
+        return TurnPlan(
+            kind="generate",
+            system_prompt=prompts.build_encore_system_prompt(leader_cfg, theme_label),
+            user_content=prompts.build_turn_user_content(digest, last_user),
+            marker="",
+            meta={"stage": "encore", "team": [], "form": state.form},
+        )
 
     theme = _resolve_theme_by_label(state.theme_label_raw, themes)
     if theme is None:
@@ -297,6 +306,7 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
             )
             digest = build_digest(messages[:-1])
             extra = safety.medium_empathy_instruction() if crisis == "medium" else ""
+            extra = "\n".join(x for x in (extra, _interaction_note(last_user, team, at_seat=True)) if x)
             user_content = prompts.build_turn_user_content(digest, last_user, extra)
             return TurnPlan(
                 kind="generate", system_prompt=system_prompt, user_content=user_content,
@@ -319,7 +329,7 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
     if stage_id == "report":
         system_prompt = prompts.build_report_system_prompt(leader_cfg, theme)
         digest = build_digest(messages)
-        user_content = "【今晚完整对话记录（摘要）】\n" + digest + "\n\n请生成《成长手记》。"
+        user_content = "【本场完整对话记录（摘要）】\n" + digest + "\n\n请生成《成长手记》。"
     else:
         system_prompt = prompts.build_turn_system_prompt(
             leader_cfg, team, stage_id, theme, themes_cfg["stages"], round_no,
@@ -327,6 +337,7 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
         )
         digest = build_digest(messages[:-1])
         extra = safety.medium_empathy_instruction() if crisis == "medium" else ""
+        extra = "\n".join(x for x in (extra, _interaction_note(last_user, team)) if x)
         user_content = prompts.build_turn_user_content(digest, last_user, extra)
 
     plan = TurnPlan(
@@ -341,11 +352,43 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
     return plan
 
 
+def _interaction_note(last_user: str, team: list[dict], at_seat: bool = False) -> str:
+    """从用户发言识别点名/没说完/想要某类桌友 → 返回附加指令（空串=无）。"""
+    notes: list[str] = []
+    if not last_user:
+        return ""
+    named = [m["name"] for m in team if m["name"] and m["name"] in last_user]
+    if named:
+        names = "、".join(named)
+        notes.append(
+            f"【特别指令】同学刚点名了{names}——本轮{names}第一个发言："
+            "先正面回应同学刚才的话（如果同学提了问题，先回答问题，"
+            "可以温和地说自己的真实感受，但不评判带领者和其他成员），"
+            "再分享自己的相关经历；小晴开头一句轻轻把话头递过去。"
+        )
+    if re.search(r"还没(说|讲)完|还没结束|我还想(说|聊)|我还没", last_user):
+        notes.append(
+            "【特别指令】同学表示还没说完——小晴本轮不要推进新环节，"
+            "先把说话空间还给同学（\"你想说的我们都想听\"），"
+            "成员只做一两句简短回应，不抢话、不总结。"
+        )
+    if at_seat and ("想要" in last_user or "有没有" in last_user) and re.search(
+        r"同学|朋友|伙伴|桌友|学长|学姐", last_user
+    ):
+        notes.append(
+            "【特别指令】同学表达了想和某类桌友同坐（见原话）。"
+            "请对照在场成员的人物卡：如果已有符合的成员，小晴要明确点出来"
+            "（例如\"你要的博士生同学，陈默就是呀\"）；如果没有，"
+            "小晴主动提出可以换人（\"想换哪位跟我说一声\"）。这个请求不能被忽略。"
+        )
+    return "\n".join(notes)
+
+
 def _invite_plan(
     messages: list[dict], last_user: str, theme: dict, form: str,
     leader_cfg: dict, characters: dict, seed_text: str, crisis: str | None,
 ) -> TurnPlan:
-    """第1轮·相邀：方案介绍 + 团友亮相 + 换人询问（只有小晴发言）。"""
+    """第1轮·相邀：方案介绍 + 四位团友各自亮相 + 换人询问。"""
     team = build_team(theme, characters, f"{seed_text}|{theme['id']}")
     team_ids = [m["id"] for m in team]
     marker = make_marker(1, "相邀", theme["label"], form, team_ids)

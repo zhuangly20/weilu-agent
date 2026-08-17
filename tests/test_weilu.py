@@ -302,8 +302,10 @@ def test_plan_greeting_substantive_starts_invite():
     assert "桌友：" in plan.marker
     assert plan.meta["theme"] == "self"
     assert len(plan.meta["team"]) == 4
-    # 相邀轮只有小晴发言
-    assert "小晴一个人发言" in plan.system_prompt
+    # 相邀轮：小晴主持 + 四位团友各自亮相一句
+    assert "本次为你召唤的AI团友" in plan.system_prompt
+    assert "自我介绍" in plan.system_prompt
+    assert director.STAGE_MIN_MEMBERS["invite"] == 4
 
 
 def test_plan_seat_confirm_ignites():
@@ -317,6 +319,81 @@ def test_plan_seat_confirm_ignites():
     assert plan.meta["stage"] == "ignite" and plan.meta["round"] == 2
     assert "第2/8轮" in plan.marker and "开场" in plan.marker
     assert plan.meta["team"] == ["曾国藩", "爱因斯坦", "陈默", "小满"]
+    # 开场轮：相似圈全员参与 + 心情打分邀请
+    assert "相似圈" in plan.system_prompt
+    assert "我想知道谁和我一样" in plan.system_prompt
+    assert "打个分" in plan.system_prompt
+    assert director.STAGE_MIN_MEMBERS["ignite"] == 4
+
+
+def test_seat_reply_requesting_peer_type_is_not_ignored():
+    msgs = [
+        {"role": "user", "content": "聊学业压力"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "我想要一个博士生同学，因为我开学要读博，我感觉很焦虑"},
+    ]
+    plan = director.plan_turn(msgs)
+    assert plan.meta["stage"] == "ignite"
+    assert "对照在场成员" in plan.user_content
+    assert "不能被忽略" in plan.user_content
+
+
+def test_midround_spotlight_when_member_named():
+    msgs = [
+        {"role": "user", "content": "聊学业压力"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "好的开始吧"},
+        _round_msg(2, "开场", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "我想问问陈默你怎么看，你是不是也觉得主持人小晴不专业"},
+    ]
+    plan = director.plan_turn(msgs)
+    assert plan.meta["stage"] == "share" and plan.meta["round"] == 3
+    assert "点名了陈默" in plan.user_content
+    assert "不评判带领者" in plan.system_prompt  # 团体铁律：点名应答规则
+
+
+def test_midround_unfinished_signal_holds_stage():
+    msgs = [
+        {"role": "user", "content": "聊学业压力"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "好的开始吧"},
+        _round_msg(2, "开场", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "我还没说完呢，我想和林徽因说话"},
+    ]
+    plan = director.plan_turn(msgs)
+    assert plan.meta["stage"] == "share"
+    assert "还没说完" in plan.user_content or "说话空间还给同学" in plan.user_content
+
+
+def test_ended_encore_answers_instead_of_canned_reply():
+    msgs = [
+        {"role": "user", "content": "聊学业压力"},
+        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "好的开始吧"},
+        _round_msg(2, "开场", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "继续"},
+        _round_msg(3, "圆桌入话", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "继续"},
+        _round_msg(4, "炉边深谈", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "继续"},
+        _round_msg(5, "交换视角", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "继续"},
+        _round_msg(6, "真心话", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "继续"},
+        _round_msg(7, "临别赠言", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "继续"},
+        _round_msg(8, "成长手记", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "明信片为什么没有给我生成出来"},
+    ]
+    plan = director.plan_turn(msgs)
+    assert plan.kind == "generate"
+    assert plan.meta["stage"] == "encore"
+    assert plan.marker == ""  # 无标记 → 状态保持 ENDED
+    assert "明信片" in plan.system_prompt or "再来一场" in plan.system_prompt
+    # 再来一场仍然走重开
+    msgs[-1] = {"role": "user", "content": "再来一场"}
+    plan2 = director.plan_turn(msgs)
+    assert plan2.kind == "scripted" and plan2.meta.get("reset") is True
 
 
 def test_plan_seat_ambiguous_reasks_without_marker():
@@ -402,9 +479,9 @@ def test_validate_turn():
 
 # ---------- 明信片 ----------
 
-HANDNOTE = """【小晴】（把一份手写便签放到你手边）这是今晚的成长手记——
+HANDNOTE = """【小晴】（把一份手写便签放到你手边）这是今天的成长手记——
 
-🕯 今晚主题：学业压力与内卷焦虑
+🕯 本场主题：学业压力与内卷焦虑
 
 🪵 你带来的：你说最近科研压力大。
 
@@ -440,7 +517,7 @@ def test_render_postcard_png():
 
     png = postcard.render_postcard(
         theme_label="学业压力",
-        message="炉火会记得今晚的每一句话。",
+        message="炉火会记得你说过的每一句话。",
         takeaways=["慢一点也没关系。", "石头已经被看清了一些。", "说出来本身就是松动。"],
         member_names=["苏轼", "牛顿", "苏晓", "小满"],
     )
@@ -484,7 +561,7 @@ async def test_report_returns_postcard_attachment(client, monkeypatch):
     monkeypatch.setattr("app.director.generate", fake_generate)
     msgs = [
         {"role": "user", "content": "聊学业压力"},
-        _round_msg(7, "收夜", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(7, "临别赠言", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "谢谢大家"},
     ]
     resp = await client.post("/v1/chat/completions", headers=HEADERS, json={"messages": msgs})
@@ -612,12 +689,12 @@ def test_pacer_disabled_passthrough():
 
 
 FAKE_TURN = (
-    "【小晴】欢迎来到清心圆桌，今晚我们不评判、不着急。\n"
-    "【苏轼】哈哈，我今晚是来躲清静的。\n"
+    "【小晴】欢迎来到清心圆桌，今天我们不评判、不着急。\n"
+    "【苏轼】哈哈，我今天是来躲清静的。\n"
     "【小满】我……有点紧张，但很高兴坐在这里。\n"
-    "【曾国藩】老夫惯常早睡，今晚破例坐一坐。\n"
+    "【曾国藩】老夫惯常早睡，今天破例坐一坐。\n"
     "【陈默】实验室刚出来，蹭个火。\n"
-    "【小晴】那我们开始今晚的第一个问题吧。"
+    "【小晴】那我们开始今天的第一个问题吧。"
 )
 
 
@@ -670,3 +747,36 @@ def test_report_prompt_is_leader_only():
     prompt = prompts.build_report_system_prompt(leader, theme)
     assert "成长手记" in prompt
     assert "小晴" in prompt
+
+
+def test_each_stage_introduces_activity():
+    cfg = load_theme_config()
+    leader = cfg["leader"]
+    theme = next(t for t in cfg["themes"] if t["id"] == "academic")
+    team = build_team(theme, load_characters(), "intro-seed")
+    stages = cfg["stages"]
+    pstages = cfg.get("painting_stages", {})
+
+    # 夜话各正式环节：小晴先介绍活动名称与目的
+    chat_names = {
+        "ignite": "相似圈", "share": "主题分享", "depth": None,
+        "persp": "交换视角", "heart": "真心话", "close": "总结与告别",
+    }
+    for stage_id, name in chat_names.items():
+        p = prompts.build_turn_system_prompt(leader, team, stage_id, theme, stages, 2, form=FORM_CHAT)
+        assert ("介绍本环节" in p) or ("介绍并开启本环节" in p), stage_id
+        if name:
+            assert name in p, stage_id
+
+    # 画会各环节（含第7轮真心话）：不缺分支，且都有介绍指令
+    paint_names = {
+        "ignite": "画会开场", "strokes": "落笔", "reveal": "画作揭晓",
+        "resonance": "画边回响", "meaning": "笔触心声", "heart": "真心话",
+    }
+    for stage_id, name in paint_names.items():
+        p = prompts.build_turn_system_prompt(
+            leader, team, stage_id, theme, stages, 3,
+            form=FORM_PAINTING, painting_stages_cfg=pstages,
+        )
+        assert ("介绍本环节" in p) or ("介绍并开启本环节" in p), stage_id
+        assert name in p, stage_id

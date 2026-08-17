@@ -8,7 +8,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import director, protocol
+from . import director, prompts, protocol
 from .config import load_settings
 from .llm import estimate_usage
 from .webui import register_webui
@@ -102,7 +102,11 @@ async def chat_completions(request: Request, authorization: str | None = Header(
     prompt_text = plan.system_prompt + plan.user_content
 
     if not stream:
-        text, issues, attachments = await director.execute_plan(plan, settings.providers)
+        try:
+            text, issues, attachments = await director.execute_plan(plan, settings.providers)
+        except Exception:
+            logger.exception("nonstream generate failed, degrade to fallback text")
+            text, issues, attachments = prompts.LLM_FALLBACK_TEXT, ["llm-error"], []
         usage = estimate_usage(prompt_text, text)
         if issues:
             logger.warning("validate issues=%s stage=%s", issues, plan.meta.get("stage"))

@@ -1,4 +1,4 @@
-"""成长手记 → 明信片渲染（Pillow 程序化绘制，深夜炉火风，与 logo 同一视觉体系）。"""
+"""成长手记 → 明信片渲染（Pillow 程序化绘制，暖色炉火风，与 logo 同一视觉体系）。"""
 from __future__ import annotations
 
 import io
@@ -58,10 +58,10 @@ def parse_handnote(text: str) -> dict:
             takeaways.append(s.lstrip("·").strip())
     message = sections.get("留给下次的", "").strip()
     if not message:
-        message = "炉火会记得今晚的每一句话。"
+        message = "炉火会记得你说过的每一句话。"
     if not takeaways:
         takeaways = ["慢一点，也没关系。"]
-    theme = sections.get("今晚主题", "")
+    theme = sections.get("本场主题", "")
     return {
         "theme": theme,
         "message": _shorten(message, 40),
