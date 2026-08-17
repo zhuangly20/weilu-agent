@@ -120,7 +120,7 @@ const log = document.getElementById('log');
 const input = document.getElementById('input');
 const btn = document.getElementById('btn');
 const keyBox = document.getElementById('key');
-keyBox.value = localStorage.getItem('weilu_key') || 'sk-weilu-dev-key';
+keyBox.value = localStorage.getItem('weilu_key') || '';
 keyBox.addEventListener('change', () => localStorage.setItem('weilu_key', keyBox.value.trim()));
 let messages = [];
 try { messages = JSON.parse(localStorage.getItem('weilu_msgs') || '[]'); } catch(e){ messages = []; }
