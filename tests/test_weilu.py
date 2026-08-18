@@ -159,44 +159,44 @@ def _round_msg(round_no, label, theme, form=FORM_CHAT, team_ids=None):
 
 
 def test_marker_v3_roundtrip():
-    m = make_marker(3, "圆桌入话", "学业压力", FORM_CHAT, TEAM_ACADEMIC)
+    m = make_marker(3, "圆桌入话", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC)
     parsed = None
     from app.session import parse_marker
 
     parsed = parse_marker("xx\n\n" + m)
     assert parsed[0] == 3 and parsed[1] == "圆桌入话"
-    assert parsed[2] == "学业压力" and parsed[3] == FORM_CHAT
+    assert parsed[2] == "减压安心之旅" and parsed[3] == FORM_CHAT
     assert parsed[4] == TEAM_ACADEMIC
     # 画会形式
-    m2 = make_marker(4, "画作揭晓", "学业压力", FORM_PAINTING, TEAM_ACADEMIC)
+    m2 = make_marker(4, "画作揭晓", "减压安心之旅", FORM_PAINTING, TEAM_ACADEMIC)
     assert parse_marker("x" + m2)[3] == FORM_PAINTING
 
 
 def test_reconstruct_stages_and_team():
     msgs = [
         {"role": "user", "content": "学业压力大"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
     ]
     st = reconstruct(msgs)
     assert st.stage == "ignite" and st.next_round == 2
     assert st.team_ids == TEAM_ACADEMIC and st.team_variants == 1
 
     msgs.append({"role": "user", "content": "开炉吧"})
-    msgs.append(_round_msg(2, "开场", "学业压力", FORM_CHAT, TEAM_ACADEMIC))
+    msgs.append(_round_msg(2, "开场", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC))
     st = reconstruct(msgs)
     assert st.stage == "share" and st.next_round == 3
 
     msgs = [{"role": "user", "content": "x"},
-            _round_msg(8, "成长手记", "学业压力", FORM_CHAT, TEAM_ACADEMIC)]
+            _round_msg(8, "成长手记", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC)]
     assert reconstruct(msgs).stage == ENDED
 
 
 def test_reconstruct_counts_swap_variants():
     msgs = [
         {"role": "user", "content": "聊学业压力"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "换掉曾国藩"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, ["simaqian", "einstein", "chenmo", "xiaoman"]),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, ["simaqian", "einstein", "chenmo", "xiaoman"]),
     ]
     st = reconstruct(msgs)
     assert st.team_variants == 2  # 换过1次
@@ -215,7 +215,7 @@ def test_detect_theme_and_form():
     assert detect_theme("你好", themes) is None
     assert detect_form("画会") == FORM_PAINTING
     assert detect_form("想一起画画") == FORM_PAINTING
-    assert detect_form("学业压力") == FORM_CHAT
+    assert detect_form("减压安心之旅") == FORM_CHAT
 
 
 def test_parse_swap_request():
@@ -276,7 +276,7 @@ def test_aid_reply_has_hotline():
 def test_plan_crisis_high_overrides_everything():
     msgs = [
         {"role": "user", "content": "学业压力大"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "我不想活了"},
     ]
     plan = director.plan_turn(msgs)
@@ -311,7 +311,7 @@ def test_plan_greeting_substantive_starts_invite():
 def test_plan_seat_confirm_ignites():
     msgs = [
         {"role": "user", "content": "聊学业压力"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "开炉吧，就他们几位"},
     ]
     plan = director.plan_turn(msgs)
@@ -319,9 +319,9 @@ def test_plan_seat_confirm_ignites():
     assert plan.meta["stage"] == "ignite" and plan.meta["round"] == 2
     assert "第2/8轮" in plan.marker and "开场" in plan.marker
     assert plan.meta["team"] == ["曾国藩", "爱因斯坦", "陈默", "小满"]
-    # 开场轮：相似圈全员参与 + 心情打分邀请
-    assert "相似圈" in plan.system_prompt
-    assert "我想知道谁和我一样" in plan.system_prompt
+    # 开场轮（减压安心之旅变体）：第一人称自我介绍+期待+内心天气+压力打分邀请
+    assert "自我介绍" in plan.system_prompt
+    assert "内心天气" in plan.system_prompt
     assert "打个分" in plan.system_prompt
     assert director.STAGE_MIN_MEMBERS["ignite"] == 4
 
@@ -329,7 +329,7 @@ def test_plan_seat_confirm_ignites():
 def test_seat_reply_requesting_peer_type_is_not_ignored():
     msgs = [
         {"role": "user", "content": "聊学业压力"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "我想要一个博士生同学，因为我开学要读博，我感觉很焦虑"},
     ]
     plan = director.plan_turn(msgs)
@@ -341,9 +341,9 @@ def test_seat_reply_requesting_peer_type_is_not_ignored():
 def test_midround_spotlight_when_member_named():
     msgs = [
         {"role": "user", "content": "聊学业压力"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "好的开始吧"},
-        _round_msg(2, "开场", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(2, "开场", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "我想问问陈默你怎么看，你是不是也觉得主持人小晴不专业"},
     ]
     plan = director.plan_turn(msgs)
@@ -355,9 +355,9 @@ def test_midround_spotlight_when_member_named():
 def test_midround_unfinished_signal_holds_stage():
     msgs = [
         {"role": "user", "content": "聊学业压力"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "好的开始吧"},
-        _round_msg(2, "开场", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(2, "开场", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "我还没说完呢，我想和林徽因说话"},
     ]
     plan = director.plan_turn(msgs)
@@ -368,21 +368,21 @@ def test_midround_unfinished_signal_holds_stage():
 def test_ended_encore_answers_instead_of_canned_reply():
     msgs = [
         {"role": "user", "content": "聊学业压力"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "好的开始吧"},
-        _round_msg(2, "开场", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(2, "开场", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "继续"},
-        _round_msg(3, "圆桌入话", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(3, "圆桌入话", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "继续"},
-        _round_msg(4, "炉边深谈", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(4, "炉边深谈", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "继续"},
-        _round_msg(5, "交换视角", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(5, "交换视角", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "继续"},
-        _round_msg(6, "真心话", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(6, "真心话", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "继续"},
-        _round_msg(7, "临别赠言", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(7, "临别赠言", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "继续"},
-        _round_msg(8, "成长手记", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(8, "成长手记", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "明信片为什么没有给我生成出来"},
     ]
     plan = director.plan_turn(msgs)
@@ -399,7 +399,7 @@ def test_ended_encore_answers_instead_of_canned_reply():
 def test_plan_seat_ambiguous_reasks_without_marker():
     msgs = [
         {"role": "user", "content": "聊学业压力"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "呃"},
     ]
     plan = director.plan_turn(msgs)
@@ -410,7 +410,7 @@ def test_plan_seat_ambiguous_reasks_without_marker():
 def test_plan_swap_flow():
     msgs = [
         {"role": "user", "content": "聊学业压力"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "换掉曾国藩吧"},
     ]
     plan = director.plan_turn(msgs)
@@ -430,11 +430,11 @@ def test_plan_swap_cap():
     after_second = ["simaqian", "newton", "suxiao", "wenyan"]          # 换2次（超量示意）
     msgs = [
         {"role": "user", "content": "聊学业压力"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "换掉曾国藩"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, after_first),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, after_first),
         {"role": "user", "content": "再换一次新阵容"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, after_second),  # variants=3 → 已用完额度
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, after_second),  # variants=3 → 已用完额度
         {"role": "user", "content": "再换掉苏晓"},
     ]
     plan = director.plan_turn(msgs)
@@ -447,11 +447,11 @@ def test_plan_mid_session_uses_marker_team():
     swapped = ["simaqian", "newton", "suxiao", "wenyan"]
     msgs = [
         {"role": "user", "content": "聊学业压力"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "换掉爱因斯坦"},
-        _round_msg(1, "相邀", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "开炉吧"},
-        _round_msg(2, "开场", "学业压力", FORM_CHAT, swapped),
+        _round_msg(2, "开场", "减压安心之旅", FORM_CHAT, swapped),
         {"role": "user", "content": "像一台一直开着但没人用的电视机"},
     ]
     plan = director.plan_turn(msgs)
@@ -462,7 +462,7 @@ def test_plan_mid_session_uses_marker_team():
 
 def test_plan_ended_reset():
     msgs = [{"role": "user", "content": "x"},
-            _round_msg(8, "成长手记", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+            _round_msg(8, "成长手记", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
             {"role": "user", "content": "再来一场"}]
     plan = director.plan_turn(msgs)
     assert plan.kind == "scripted" and plan.meta.get("reset")
@@ -516,7 +516,7 @@ def test_render_postcard_png():
     from app import postcard
 
     png = postcard.render_postcard(
-        theme_label="学业压力",
+        theme_label="减压安心之旅",
         message="炉火会记得你说过的每一句话。",
         takeaways=["慢一点也没关系。", "石头已经被看清了一些。", "说出来本身就是松动。"],
         member_names=["苏轼", "牛顿", "苏晓", "小满"],
@@ -561,7 +561,7 @@ async def test_report_returns_postcard_attachment(client, monkeypatch):
     monkeypatch.setattr("app.director.generate", fake_generate)
     msgs = [
         {"role": "user", "content": "聊学业压力"},
-        _round_msg(7, "临别赠言", "学业压力", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(7, "临别赠言", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "谢谢大家"},
     ]
     resp = await client.post("/v1/chat/completions", headers=HEADERS, json={"messages": msgs})
@@ -606,13 +606,13 @@ def test_painting_strokes_and_reveal(monkeypatch):
         "【爱因斯坦】我想加上一盏还亮着的灯。\n"
         "【陈默】我想在这幅画上加上一条没走完的栈道。\n"
         "【小满】我想加上一扇虚掩的门。\n\n"
-        + mm(3, "落笔", "学业压力", FORM_PAINTING, team)
+        + mm(3, "落笔", "减压安心之旅", FORM_PAINTING, team)
     )
     msgs = [
         {"role": "user", "content": "画会，聊学业压力"},
-        _round_msg(1, "相邀", "学业压力", FORM_PAINTING, team),
+        _round_msg(1, "相邀", "减压安心之旅", FORM_PAINTING, team),
         {"role": "user", "content": "开炉吧"},
-        _round_msg(2, "开场", "学业压力", FORM_PAINTING, team),
+        _round_msg(2, "开场", "减压安心之旅", FORM_PAINTING, team),
         {"role": "user", "content": "（成员们添笔）"},
         {"role": "assistant", "content": strokes_msg},
         {"role": "user", "content": "我想加上一轮刚升起来的月亮"},
@@ -752,7 +752,7 @@ def test_report_prompt_is_leader_only():
 def test_each_stage_introduces_activity():
     cfg = load_theme_config()
     leader = cfg["leader"]
-    theme = next(t for t in cfg["themes"] if t["id"] == "academic")
+    theme = next(t for t in cfg["themes"] if t["id"] == "self")  # 通用主题（无主题变体）
     team = build_team(theme, load_characters(), "intro-seed")
     stages = cfg["stages"]
     pstages = cfg.get("painting_stages", {})
@@ -780,3 +780,139 @@ def test_each_stage_introduces_activity():
         )
         assert ("介绍本环节" in p) or ("介绍并开启本环节" in p), stage_id
         assert name in p, stage_id
+
+
+# ---------- 减压安心之旅（主题改造） ----------
+
+
+def test_stress_theme_routing_broad():
+    themes = load_theme_config()["themes"]
+    assert detect_theme("最近心累，什么都不想干", themes)["id"] == "academic"
+    assert detect_theme("工作压力好大，喘不过气", themes)["id"] == "academic"
+    assert detect_theme("失眠好几天了，撑不住", themes)["id"] == "academic"
+    assert detect_theme("想家了，宿舍也融不进去", themes)["id"] == "connection"
+    assert detect_theme("我是谁，想要什么", themes)["id"] == "self"
+
+
+def test_stress_warm_opening_and_leader_brief_invite():
+    plan = director.plan_turn([{"role": "user", "content": "我想参加减压安心之旅"}])
+    assert plan.meta["stage"] == "invite" and plan.meta["theme"] == "academic"
+    warm = plan.meta.get("warm_opening") or ""
+    assert warm.startswith("【小晴】")
+    assert "不是心理治疗" in warm and "留在圆桌" in warm  # 三句口头约定在场
+    assert plan.meta.get("invite_members_silent") is True
+    assert "保持安静" in plan.system_prompt  # 成员本轮不发言，小晴代介绍
+    assert "本次为你召唤" not in plan.system_prompt
+
+
+def test_stress_ignite_intro_weather():
+    msgs = [
+        {"role": "user", "content": "我想参加减压安心之旅"},
+        _round_msg(1, "相邀", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
+        {"role": "user", "content": "开始吧"},
+    ]
+    plan = director.plan_turn(msgs)
+    assert plan.meta["stage"] == "ignite"
+    assert "自我介绍" in plan.system_prompt and "内心天气" in plan.system_prompt
+    assert "期待" in plan.system_prompt
+    assert "打个分" in plan.system_prompt  # 压力温度计
+
+
+def test_stress_depth_has_normalization():
+    msgs = _stress_msgs_to(4) + [{"role": "user", "content": "论文一直改，肩膀一直是紧的"}]
+    plan = director.plan_turn(msgs)
+    assert plan.meta["stage"] == "depth"
+    assert "正常化" in plan.system_prompt or "正常反应" in plan.system_prompt
+
+
+def _stress_msgs_to(round_no: int) -> list[dict]:
+    """构造进行到第 round_no 轮（不含该轮标记）的会话历史。"""
+    labels = {1: "相邀", 2: "开场", 3: "圆桌入话", 4: "圆桌深谈", 5: "交换视角",
+              6: "真心话", 7: "临别赠言"}
+    fills = {1: "开始吧", 2: "论文改不完", 3: "肩膀紧、心里像阴天", 4: "最沉的是怕来不及",
+             5: "怕自己不行", 6: "谢谢大家", 7: "嗯"}
+    msgs = [{"role": "user", "content": "我想参加减压安心之旅"}]
+    for r in range(1, round_no):
+        msgs.append({"role": "user", "content": fills[r]})
+        msgs.append(_round_msg(r, labels[r], "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC))
+    return msgs
+
+
+def test_stress_persp_is_breathing_station():
+    msgs = _stress_msgs_to(5) + [{"role": "user", "content": "怕自己不行"}]
+    plan = director.plan_turn(msgs)
+    assert plan.meta["stage"] == "persp"
+    assert "呼吸站" in plan.system_prompt and "腹式呼吸" in plan.system_prompt
+    assert "情绪脑" in plan.system_prompt  # 三脑白话讲法
+    assert "http" not in plan.system_prompt  # URL 只能由代码追加，prompt 里绝不出现
+    card = plan.meta.get("resource_card_text") or ""
+    assert "bilibili" in card and "再练一次" in card
+    assert "three-brains.html" in card
+    assert plan.meta.get("slow_pacing") is True
+
+
+def test_progress_line_format():
+    assert director.progress_line(3, "压力地图") == "📍 环节 3/8 · 压力地图｜还剩5个环节"
+    assert director.progress_line(8, "成长手记") == "📍 环节 8/8 · 成长手记｜本场最后一环"
+
+
+def test_finalize_appends_marker_progress_and_card():
+    msgs = _stress_msgs_to(5) + [{"role": "user", "content": "怕自己不行"}]
+    plan = director.plan_turn(msgs)
+    final = director._finalize_body(plan, "【小晴】好")
+    assert "（圆桌进度：第5/8轮" in final
+    assert "📍 环节 5/8" in final and "还剩3个环节" in final
+    assert "bilibili" in final
+
+
+def test_no_stove_wording_anywhere():
+    for text in (prompts.GREETING_TEXT, prompts.MENU_RETRY_TEXT, prompts.ENDED_TEXT,
+                 prompts.LLM_FALLBACK_TEXT, prompts.SEAT_REASK_TEXT, prompts.NO_MORE_SWAP_TEXT):
+        assert "炉" not in text
+    cfg = load_theme_config()
+    for t in cfg["themes"]:
+        assert "炉" not in t["menu_desc"]
+
+
+@pytest.mark.asyncio
+async def test_report_html_flow(monkeypatch):
+    import json as _json
+
+    payload = _json.dumps({
+        "leader_note": "这一场你把压力摊开来看了看，还练了呼吸。",
+        "pressure_note": "论文反复修改与紧绷的肩膀",
+        "review": ["相邀开桌", "天气站相识", "压力地图", "深谈与正常化", "呼吸站"],
+        "member_tips": [{"name": "曾国藩", "tip": "大事拆成小步子"},
+                        {"name": "爱因斯坦", "tip": "先安顿情绪脑"},
+                        {"name": "陈默", "tip": "写下来就不乱"},
+                        {"name": "小满", "tip": "允许自己慢"}],
+        "takeaways": ["先呼吸再想", "把大事拆小", "说出来就是松动"],
+        "encouragement": "你不是撑不住，只是提醒得太用力。",
+        "pressure_before": 7,
+    }, ensure_ascii=False)
+
+    async def fake_generate(providers, messages, **kw):
+        return payload
+
+    monkeypatch.setattr("app.director.generate", fake_generate)
+    msgs = _stress_msgs_to(8)
+    msgs.append({"role": "user", "content": "继续"})  # 进入第8轮·报告
+    plan = director.plan_turn(msgs)
+    assert plan.meta["stage"] == "report" and plan.meta.get("report_html") is True
+    text, issues, attachments = await director.execute_plan(plan, [])
+    assert "压力温度：开场7分" in text
+    assert "📍 环节 8/8" in text
+    names = [a["fileName"] for a in attachments]
+    assert any(n.endswith(".html") for n in names), names
+    assert any(n.endswith(".png") for n in names), names
+    from app import files as file_store
+
+    html_att = next(a for a in attachments if a["fileName"].endswith(".html"))
+    token = html_att["fileUrl"].rsplit("/", 1)[-1]
+    data, mime = file_store.get(token)
+    assert mime == "text/html"
+    page = data.decode("utf-8")
+    assert "减压清单" in page and "先呼吸再想" in page
+    assert "7 分" in page  # 压力温度前测块
+    assert "bilibili" in page  # 练习链接
+    assert "斑马" in page  # 书单

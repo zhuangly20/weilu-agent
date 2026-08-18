@@ -6,6 +6,7 @@ plan_turn() 是纯函数（可测试），返回本轮计划；
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -51,6 +52,48 @@ STAGE_MIN_MEMBERS_PAINTING = {
 
 # 从历史发言里识别"添笔"句式（成员+小晴的笔触）
 STROKE_LINE_RE = None  # 延迟初始化，见 extract_strokes
+
+
+def progress_line(round_no: int, stage_label: str) -> str:
+    """用户可见的环节进度行（代码追加，格式固定）。"""
+    if round_no >= TOTAL_ROUNDS:
+        return f"📍 环节 {round_no}/{TOTAL_ROUNDS} · {stage_label}｜本场最后一环"
+    return f"📍 环节 {round_no}/{TOTAL_ROUNDS} · {stage_label}｜还剩{TOTAL_ROUNDS - round_no}个环节"
+
+
+def _finalize_body(plan: "TurnPlan", body: str) -> str:
+    """统一收尾：开场白前置、标记行/进度行/资源卡片追加（仅拼接，不改内容）。"""
+    if plan.meta.get("warm_opening"):
+        body = plan.meta["warm_opening"].strip() + "\n\n" + body
+    parts = [body]
+    if plan.marker:
+        parts.append(plan.marker)
+        parts.append(progress_line(int(plan.meta.get("round") or 1),
+                                   str(plan.meta.get("stage_label") or "环节")))
+    if plan.meta.get("resource_card_text"):
+        parts.append(plan.meta["resource_card_text"])
+    return "\n\n".join(p for p in parts if p.strip())
+
+
+def _parse_report_json(text: str) -> dict | None:
+    """解析报告 JSON（容忍 markdown 代码围栏）；结构不对返回 None。"""
+    t = text.strip()
+    if t.startswith("```"):
+        t = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", t).strip()
+    try:
+        obj = json.loads(t)
+    except Exception:
+        return None
+    if not isinstance(obj, dict):
+        return None
+    obj.setdefault("leader_note", "")
+    obj.setdefault("pressure_note", "")
+    obj.setdefault("review", [])
+    obj.setdefault("member_tips", [])
+    obj.setdefault("takeaways", [])
+    obj.setdefault("encouragement", "")
+    obj.setdefault("pressure_before", None)
+    return obj
 
 
 @dataclass
@@ -294,7 +337,7 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
                 meta={"stage": "seat", "round": 1, "theme": theme["id"], "theme_label": theme["label"],
                       "form": state.form, "team": [characters[i]["name"] for i in new_ids if i in characters],
                       "departing": [m["name"] for m in departing], "arriving": [m["name"] for m in arriving],
-                      "crisis": crisis},
+                      "stage_label": "相邀", "crisis": crisis},
             )
         if is_confirm(last_user) or len(last_user.strip()) >= GREETING_MIN_LEN:
             # 明确确认，或实质性发言（视为默许阵容、把话接进开场）
@@ -344,8 +387,16 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
         kind="generate", system_prompt=system_prompt, user_content=user_content,
         marker=marker,
         meta={"stage": stage_id, "round": round_no, "theme": theme["id"], "theme_label": theme["label"],
-              "form": form, "team": [m["name"] for m in team], "crisis": crisis},
+              "form": form, "team": [m["name"] for m in team], "stage_label": label_cfg[stage_id]["label"],
+              "crisis": crisis},
     )
+    if form == FORM_CHAT and stage_id == "persp" and theme.get("persp_variant") == "breathing":
+        plan.meta["resource_card_text"] = prompts.build_resource_card(
+            themes_cfg.get("resources") or {}, load_settings().public_base_url
+        )
+        plan.meta["slow_pacing"] = True
+    if stage_id == "report" and theme.get("report_variant") == "html":
+        plan.meta["report_html"] = True
     pp = _painting_prompt_for(plan, messages)
     if pp:
         plan.meta["painting_prompt"] = pp
@@ -400,11 +451,104 @@ def _invite_plan(
         kind="generate", system_prompt=system_prompt, user_content=user_content,
         marker=marker,
         meta={"stage": "invite", "round": 1, "theme": theme["id"], "theme_label": theme["label"],
-              "form": form, "team": [m["name"] for m in team], "crisis": crisis},
+              "form": form, "team": [m["name"] for m in team], "stage_label": "相邀",
+              "warm_opening": str(theme.get("warm_opening") or "").strip() or None,
+              "invite_members_silent": theme.get("intro_style") == "leader_brief" or None,
+              "crisis": crisis},
     )
 
 
 # ---------- 执行 ----------
+
+
+async def _legacy_report(plan: TurnPlan, providers: list[ProviderConfig]) -> str:
+    """JSON 报告解析失败时的兜底：退回旧版文本成长手记。"""
+    themes_cfg = load_theme_config()
+    theme = next(
+        (t for t in themes_cfg["themes"] if t["id"] == plan.meta.get("theme")),
+        themes_cfg["themes"][0],
+    )
+    system = prompts.build_report_system_prompt(themes_cfg["leader"], {**theme, "report_variant": None})
+    return await generate(
+        providers,
+        [{"role": "system", "content": system}, {"role": "user", "content": plan.user_content}],
+        temperature=0.7, max_tokens=1200,
+    )
+
+
+async def _generate_report_fields(
+    plan: TurnPlan, providers: list[ProviderConfig]
+) -> tuple[str, dict | None]:
+    """HTML 报告模式：让 LLM 输出 JSON 素材；两次解析失败退回文本手记。"""
+    llm_messages = [
+        {"role": "system", "content": plan.system_prompt},
+        {"role": "user", "content": plan.user_content},
+    ]
+    try:
+        for temp in (0.6, 0.3):
+            text = await generate(providers, llm_messages, temperature=temp, max_tokens=900)
+            fields = _parse_report_json(text)
+            if fields is not None:
+                return text, fields
+    except Exception:
+        pass
+    return await _legacy_report(plan, providers), None
+
+
+def _report_display_text(fields: dict) -> str:
+    lines = [
+        "【小晴】（把一份小报告轻轻放到你手边）"
+        + str(fields.get("leader_note") or "这是你这一场的收获——")
+    ]
+    pb = fields.get("pressure_before")
+    if isinstance(pb, (int, float)) and not isinstance(pb, bool) and 0 <= pb <= 10:
+        lines.append(f"🌡 压力温度：开场{int(pb)}分 → 现在，你想给自己打几分？")
+    lines.append("📎 你的《成长报告》和明信片就在下面的附件卡片里，点开就能看～")
+    return "\n".join(lines)
+
+
+def _report_attachments(plan: TurnPlan, fields: dict) -> list[dict]:
+    """HTML 成长报告（长时效 token）+ 明信片 PNG。"""
+    from . import files, postcard, report_html
+
+    theme_label = str(plan.meta.get("theme_label") or "清心圆桌")
+    member_names = list(plan.meta.get("team", []))
+    themes_cfg = load_theme_config()
+    settings = load_settings()
+    attachments: list[dict] = []
+    try:
+        html = report_html.render(
+            fields, theme_label=theme_label, member_names=member_names,
+            resources=themes_cfg.get("resources") or {}, public_base=settings.public_base_url,
+        )
+        token = files.put(html, mime="text/html", ext="html", ttl=24 * 3600)
+        attachments.append({
+            "fileUrl": f"{settings.public_base_url}/files/{token}",
+            "fileName": "清心圆桌·成长报告.html",
+            "fileType": "file",
+            "mimeType": "text/html",
+            "fileSize": len(html),
+        })
+    except Exception:  # noqa: BLE001 - 报告失败不打断对话
+        pass
+    try:
+        takeaways = [str(t)[:20] for t in (fields.get("takeaways") or [])][:3] or ["慢一点，也没关系。"]
+        message = str(fields.get("encouragement") or "")[:40] or "把压力说出来，就是照顾自己的开始。"
+        png = postcard.render_postcard(
+            theme_label=theme_label, message=message,
+            takeaways=takeaways, member_names=member_names,
+        )
+        token = files.put(png)
+        attachments.append({
+            "fileUrl": f"{settings.public_base_url}/files/{token}",
+            "fileName": "清心圆桌·明信片.png",
+            "fileType": "image",
+            "mimeType": "image/png",
+            "fileSize": len(png),
+        })
+    except Exception:  # noqa: BLE001
+        pass
+    return attachments
 
 
 async def execute_plan(
@@ -421,6 +565,8 @@ async def execute_plan(
     if str(plan.meta.get("stage")) == "seat":  # 换人轮：道别成员也可发言
         allowed += list(plan.meta.get("departing", []))
         min_members = 1
+    if plan.meta.get("invite_members_silent"):  # 相邀轮小晴代介绍：成员不发言
+        min_members = 0
     llm_messages = [
         {"role": "system", "content": plan.system_prompt},
         {"role": "user", "content": plan.user_content},
@@ -428,6 +574,16 @@ async def execute_plan(
     img_task = None
     if plan.meta.get("painting_prompt"):
         img_task = asyncio.create_task(imagegen.generate_painting(plan.meta["painting_prompt"]))
+    if plan.meta.get("report_html"):
+        text, fields = await _generate_report_fields(plan, providers)
+        if fields is not None:
+            body = _report_display_text(fields)
+            attachments = _report_attachments(plan, fields)
+            return _finalize_body(plan, body), [], attachments
+        # JSON 解析失败 → text 已是旧版文本手记，走下方通用流程
+        body = text.strip()
+        attachments = build_attachments(plan, body)
+        return _finalize_body(plan, body), [], attachments
     text = await generate(providers, llm_messages, temperature=0.85, max_tokens=1200)
     issues = prompts.validate_turn(text, allowed, min_members)
     if issues and plan.meta.get("stage") != "report":
@@ -442,9 +598,7 @@ async def execute_plan(
         if img:
             attachments.extend(_image_attachment(img))
     attachments.extend(build_attachments(plan, body))
-    if plan.marker:
-        body = body + "\n\n" + plan.marker
-    return body, issues, attachments
+    return _finalize_body(plan, body), issues, attachments
 
 
 async def stream_plan(
@@ -452,8 +606,8 @@ async def stream_plan(
 ) -> AsyncIterator[tuple[str, str]]:
     """流式执行：yield ("delta", text) 增量；结尾 yield ("final", 完整文本含标记)。
 
-    增量经 pacer 重放：发言行逐字、行间停顿，呈现"成员一个个发言"的节奏。
-    生成失败时 yield ("final", 降级文案)（无标记，状态不推进）。
+    增量经 pacer 重放：发言行逐字、行间停顿，呈现"成员一个个发言"的节奏；
+    呼吸站轮使用更慢的节奏参数。生成失败时 yield ("final", 降级文案)。
     """
     from .pacer import paced
 
@@ -470,6 +624,14 @@ async def stream_plan(
 
     from . import imagegen
 
+    async def paced_text(text: str):
+        async def src():
+            for ch in _chunk(text, 16):
+                yield ch
+
+        async for d in paced(src(), scripted=True):
+            yield d
+
     llm_messages = [
         {"role": "system", "content": plan.system_prompt},
         {"role": "user", "content": plan.user_content},
@@ -477,10 +639,38 @@ async def stream_plan(
     img_task = None
     if plan.meta.get("painting_prompt"):
         img_task = asyncio.create_task(imagegen.generate_painting(plan.meta["painting_prompt"]))
+
+    if plan.meta.get("report_html"):
+        text, fields = await _generate_report_fields(plan, providers)
+        display = _report_display_text(fields) if fields is not None else text.strip()
+        async for delta in paced_text(display):
+            yield "delta", delta
+        attachments = (
+            _report_attachments(plan, fields) if fields is not None
+            else build_attachments(plan, display)
+        )
+        if attachments:
+            yield "attachments", attachments
+        final = _finalize_body(plan, display)
+        if len(final) > len(display):
+            yield "delta", final[len(display):]
+        yield "final", final
+        return
+
+    streamed_prefix = ""
+    if plan.meta.get("warm_opening"):
+        streamed_prefix = plan.meta["warm_opening"].strip() + "\n\n"
+        async for delta in paced_text(streamed_prefix):
+            yield "delta", delta
+
+    pace_kwargs = {}
+    if plan.meta.get("slow_pacing"):  # 呼吸站：字更慢、发言行间停顿更长
+        pace_kwargs = {"char_ms": 55.0, "pause_ms": 4200.0}
     collected: list[str] = []
     try:
         async for delta in paced(
-            stream_generate(providers, llm_messages, temperature=0.85, max_tokens=1200)
+            stream_generate(providers, llm_messages, temperature=0.85, max_tokens=1200),
+            **pace_kwargs,
         ):
             collected.append(delta)
             yield "delta", delta
@@ -488,13 +678,7 @@ async def stream_plan(
         if img_task is not None:
             img_task.cancel()
         if not collected:
-            fallback_src = _chunk(prompts.LLM_FALLBACK_TEXT, 16)
-
-            async def fb_source():
-                for ch in fallback_src:
-                    yield ch
-
-            async for delta in paced(fb_source(), scripted=True):
+            async for delta in paced_text(prompts.LLM_FALLBACK_TEXT):
                 yield "delta", delta
             yield "final", prompts.LLM_FALLBACK_TEXT
             return
@@ -507,11 +691,11 @@ async def stream_plan(
     attachments.extend(build_attachments(plan, body))
     if attachments:
         yield "attachments", attachments
-    if plan.marker:
-        marker_text = ("\n\n" if body else "") + plan.marker
-        yield "delta", marker_text
-        body = body + marker_text
-    yield "final", body
+    final = _finalize_body(plan, body)
+    tail = final[len(streamed_prefix):] if final.startswith(streamed_prefix) else final
+    if len(tail) > len(body):
+        yield "delta", tail[len(body):]
+    yield "final", final
 
 
 def _chunk(text: str, size: int = 24) -> list[str]:

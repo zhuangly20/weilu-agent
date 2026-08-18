@@ -1,4 +1,13 @@
 version: '2.0'
+# 外链资源集中管理：由代码在固定位置追加，prompt 中永不出现具体 URL
+resources:
+  breathing_video: https://www.bilibili.com/video/BV1Sz4y1S7pb/
+  mindfulness_audio: https://www.bilibili.com/video/BV1yY411p7qZ/
+  three_brains_path: /assets/reports/three-brains.html
+  books:
+  - 为什么斑马不得胃溃疡｜罗伯特·萨波斯基
+  - 情绪急救｜盖伊·温奇
+  - 自控力｜凯利·麦格尼格尔
 leader:
   id: xiaoqing
   name: 小晴
@@ -31,7 +40,7 @@ stages:
     label: 圆桌入话
     brief: 成员回应用户的破冰回答，小晴引出主活动问题
   depth:
-    label: 炉边深谈
+    label: 圆桌深谈
     brief: 成员围绕用户的主活动分享深度回应自己的相关经历，小晴提出收尾问题
   persp:
     label: 交换视角
@@ -74,7 +83,7 @@ themes:
 - id: self
   label: 自我探索
   full_label: 自我探索与自我接纳
-  menu_desc: '''我是谁、我想要什么''——和炉边的人一起找答案'
+  menu_desc: '''我是谁、我想要什么''——和圆桌边的人一起找答案'
   keywords:
   - 自己
   - 自我
@@ -115,12 +124,15 @@ themes:
     - guyifan
     - xunanzhi
 - id: academic
-  label: 学业压力
-  full_label: 学业压力与内卷焦虑
-  menu_desc: 绩点、科研、同辈比较——把心里那块石头放到炉边
+  label: 减压安心之旅
+  full_label: 减压安心之旅——压力管理
+  menu_desc: 学业、科研、生活——把压力放到圆桌上，一起松一松
   keywords:
-  - 学业
+  - 减压
+  - 安心
   - 压力
+  - 放松
+  - 学业
   - 考试
   - 绩点
   - 卷
@@ -141,15 +153,40 @@ themes:
   - 保研
   - 考研
   - 出分
-  icebreak: 最近一个让你觉得「居然撑过来了」的小时刻，是什么样的？不用是大事。
-  activity: 如果把你最近心上的压力画成一块石头，它长什么样？多重？从什么时候开始背上的？
-  closing_question: 从圆桌离开时你只想带走一句话，你希望那句话是什么？
-  persp_guidance: 从'把大问题拆成小问题'的角度：不催促行动，用自己视角让用户看到这块石头其实有缝。
-  report_focus: 用户描述的压力源、用户已经在用的应对方式、成员们给出的多元视角
+  - 累
+  - 好累
+  - 心累
+  - 太累
+  - 喘不过气
+  - 紧绷
+  - 内耗
+  - 失眠
+  - 睡不着
+  - 烦
+  - 好烦
+  - 烦躁
+  - emo
+  - 崩溃
+  - 身心俱疲
+  - 熬不动
+  - 人际
+  - 家里
+  warm_opening: "【小晴】欢迎来到减压安心之旅～我是小晴。这一场，我们想陪你把压力放一放：为你召集几位同伴，围坐一桌，聊聊心事，也练一练减压的小方法。开桌前说好三件小事——在这里说的话，就留在圆桌上；我们不评判彼此，怎么想就怎么说；这里是同伴支持的小天地，不是心理治疗哦。那，我们开始～"
+  intro_style: leader_brief
+  ignite_variant: intro_weather
+  normalize_in_depth: true
+  persp_variant: breathing
+  leave_coping_tip: true
+  report_variant: html
+  icebreak: 最近哪件事让你的压力悄悄变大了？学业、科研、关系、家里的事，都可以说说。
+  activity: 压力来的时候，你的身体和心情分别是什么信号？哪里先紧起来、情绪像什么天气？
+  closing_question: 这块压力里，最沉的是哪一部分？
+  persp_guidance: 讲完道理后，最后一句顺势把道理用回同学自己的处境——比如"你不是撑不住，是身体提醒得太用力了"；不评价、不说教。
+  report_focus: 用户描述的压力源与身心信号、用户已经在用的应对方式、成员们带来的减压方法与新视角
   painting:
-    framing: 这幅画关于「心上那块石头」——把各自的重量画进同一幅画里，看看它会变成什么
+    framing: 这幅画关于「各自的重量」——把每个人心上压着的东西画进同一幅画里，看看它会变成什么
     reflection_1: 第一次看到这幅完成的画，它比你想象中更沉还是更轻？
-    reflection_2: 画下你自己那一笔的时候，那块石头在你手里是什么感觉？
+    reflection_2: 画下你自己那一笔的时候，那些重量在你手里是什么感觉？
   slots:
     bt_hist:
     - zengguofan

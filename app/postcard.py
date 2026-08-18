@@ -1,4 +1,4 @@
-"""成长手记 → 明信片渲染（Pillow 程序化绘制，暖色炉火风，与 logo 同一视觉体系）。"""
+"""成长手记 → 明信片渲染（Pillow 程序化绘制，明亮暖色风，与 logo 同一视觉体系）。"""
 from __future__ import annotations
 
 import io
@@ -58,7 +58,7 @@ def parse_handnote(text: str) -> dict:
             takeaways.append(s.lstrip("·").strip())
     message = sections.get("留给下次的", "").strip()
     if not message:
-        message = "炉火会记得你说过的每一句话。"
+        message = "圆桌会记得你说过的每一句话。"
     if not takeaways:
         takeaways = ["慢一点，也没关系。"]
     theme = sections.get("本场主题", "")
@@ -136,8 +136,8 @@ def render_postcard(
     draw.rounded_rectangle([44, 44, W - 44, H - 44], radius=28, outline=(*GOLD, 120), width=3)
     # 邮票角标
     draw.rounded_rectangle([W - 250, 78, W - 88, 240], radius=10, outline=GOLD, width=3)
-    draw.text((W - 169, 120), "围", font=_font(64), fill=GOLD, anchor="ma")
-    draw.text((W - 169, 190), "炉", font=_font(64), fill=GOLD, anchor="ma")
+    draw.text((W - 169, 120), "圆", font=_font(64), fill=GOLD, anchor="ma")
+    draw.text((W - 169, 190), "桌", font=_font(64), fill=GOLD, anchor="ma")
 
     x = 110
     # 标题
@@ -166,7 +166,7 @@ def render_postcard(
     # 落款
     draw.text((W // 2, H - 108), f"小晴 与 {'、'.join(member_names)}", font=_font(34),
               fill=PAPER_DIM, anchor="ma")
-    draw.text((W // 2, H - 58), "—— 炉火不熄，随时回来 ——", font=_font(26),
+    draw.text((W // 2, H - 58), "—— 阳光正好，随时回来 ——", font=_font(26),
               fill=PAPER_DIM, anchor="ma")
 
     buf = io.BytesIO()

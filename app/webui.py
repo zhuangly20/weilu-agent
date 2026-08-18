@@ -100,7 +100,7 @@ PAGE = """<!DOCTYPE html>
     <div class="grp">① 挑个主题，开一场清心圆桌</div>
     <div class="quick grid">
       <button onclick="quickSend('想聊聊自我探索')">🧭 自我探索<small>我是谁、我想要什么</small></button>
-      <button onclick="quickSend('想聊聊学业压力')">📚 学业压力<small>绩点、科研、同辈比较</small></button>
+      <button onclick="quickSend('我想参加减压安心之旅')">🫧 减压安心之旅<small>学业、科研、生活，来松一松</small></button>
       <button onclick="quickSend('想聊聊新生适应')">🌱 新生适应<small>想家、宿舍、新环境</small></button>
       <button onclick="quickSend('想聊聊就业迷茫')">🛤 就业迷茫<small>工作、升学、Gap</small></button>
     </div>

@@ -30,19 +30,22 @@ def pacing_enabled() -> bool:
     return os.environ.get("WEILU_PACING", "true").strip().lower() != "false"
 
 
-async def paced(source: AsyncIterator[str], scripted: bool = False) -> AsyncIterator[str]:
+async def paced(
+    source: AsyncIterator[str],
+    scripted: bool = False,
+    char_ms: float | None = None,
+    pause_ms: float | None = None,
+) -> AsyncIterator[str]:
     if not pacing_enabled():
         async for chunk in source:
             if chunk:
                 yield chunk
         return
 
-    if scripted:
-        char_ms = _env_float("WEILU_SCRIPT_PACE_CHAR_MS", 12.0)
-        pause_ms = _env_float("WEILU_SCRIPT_PACE_PAUSE_MS", 500.0)
-    else:
-        char_ms = _env_float("WEILU_PACE_CHAR_MS", 28.0)
-        pause_ms = _env_float("WEILU_PACE_PAUSE_MS", 1200.0)
+    if char_ms is None:
+        char_ms = _env_float("WEILU_SCRIPT_PACE_CHAR_MS", 12.0) if scripted else _env_float("WEILU_PACE_CHAR_MS", 28.0)
+    if pause_ms is None:
+        pause_ms = _env_float("WEILU_SCRIPT_PACE_PAUSE_MS", 500.0) if scripted else _env_float("WEILU_PACE_PAUSE_MS", 1200.0)
 
     acc = ""                 # 已接收文本
     i = 0                    # 已释放位置
