@@ -65,6 +65,10 @@ def load_crisis_config() -> dict:
     return _load_yaml("crisis_keywords.yaml")
 
 
+def load_group_v2_config() -> dict:
+    return _load_yaml("group_v2.yaml")
+
+
 def _load_providers_from_env() -> list[ProviderConfig]:
     """史记风格的 AI_PROVIDER_<ID>_* 变量；退回到单组 AI_BASE_URL/AI_API_KEY/AI_MODEL。"""
     providers: list[ProviderConfig] = []

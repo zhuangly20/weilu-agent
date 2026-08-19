@@ -8,7 +8,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from app import director, prompts, safety
+from app import director, group_v2, prompts, safety
 from app.config import load_characters, load_theme_config
 from app.main import app
 from app.session import (
@@ -317,7 +317,7 @@ def test_plan_seat_confirm_ignites():
     plan = director.plan_turn(msgs)
     assert plan.kind == "generate"
     assert plan.meta["stage"] == "ignite" and plan.meta["round"] == 2
-    assert "第2/8轮" in plan.marker and "开场" in plan.marker
+    assert "第2/8轮" in plan.marker and "自我介绍与天气站" in plan.marker
     assert plan.meta["team"] == ["曾国藩", "爱因斯坦", "陈默", "小满"]
     # 开场轮（减压安心之旅变体）：第一人称自我介绍+期待+内心天气+压力打分邀请
     assert "自我介绍" in plan.system_prompt
@@ -374,7 +374,7 @@ def test_ended_encore_answers_instead_of_canned_reply():
         {"role": "user", "content": "继续"},
         _round_msg(3, "圆桌入话", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "继续"},
-        _round_msg(4, "炉边深谈", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
+        _round_msg(4, "深谈·正常化", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "继续"},
         _round_msg(5, "交换视角", "减压安心之旅", FORM_CHAT, TEAM_ACADEMIC),
         {"role": "user", "content": "继续"},
@@ -477,15 +477,48 @@ def test_validate_turn():
     assert any("unknown-speaker" in i for i in issues)
 
 
+def test_validate_turn_rejects_legacy_product_imagery():
+    for forbidden in ("围炉", "炉火", "火炉", "火焰", "夜话", "深夜", "夜里", "小屋", "🔥", "🪵"):
+        issues = prompts.validate_turn(f"【小晴】{forbidden}", ["小晴"])
+        assert f"forbidden-word:{forbidden}" in issues
+
+
+@pytest.mark.asyncio
+async def test_stream_hides_legacy_generated_imagery(monkeypatch):
+    async def fake_stream(providers, messages, **kw):
+        yield "【小晴】我们围炉聊聊。"
+
+    monkeypatch.setattr("app.director.stream_generate", fake_stream)
+    plan = director.plan_turn([{"role": "user", "content": "我想参加减压安心之旅"}])
+    events = [event async for event in director.stream_plan(plan, [])]
+    visible = "".join(payload for kind, payload in events if kind == "delta")
+    final = next(payload for kind, payload in events if kind == "final")
+    assert "围炉" not in visible and "围炉" not in final
+    assert prompts.LLM_FALLBACK_TEXT in final
+
+
+@pytest.mark.asyncio
+async def test_report_rejects_legacy_generated_imagery(monkeypatch):
+    async def fake_generate(providers, messages, **kw):
+        return '{"leader_note":"围炉聊聊", "pressure_note":"压力", "review":[], "member_tips":[], "takeaways":[], "encouragement":"", "pressure_before":null}'
+
+    monkeypatch.setattr("app.director.generate", fake_generate)
+    plan = director.plan_turn(_stress_msgs_to(8) + [{"role": "user", "content": "继续"}])
+    text, _issues, attachments = await director.execute_plan(plan, [])
+    assert "围炉" not in text
+    assert "本场主题：清心圆桌活动" in text
+    assert len(attachments) == 1 and attachments[0]["mimeType"] == "image/png"
+
+
 # ---------- 明信片 ----------
 
 HANDNOTE = """【小晴】（把一份手写便签放到你手边）这是今天的成长手记——
 
-🕯 本场主题：学业压力与内卷焦虑
+📝 本场主题：减压安心之旅
 
-🪵 你带来的：你说最近科研压力大。
+🫧 你带来的：你说最近科研压力大。
 
-🔥 炉边的回响：苏晓说她也有过背着石头的日子。
+💬 桌友们的回响：苏晓说她也有过背着石头的日子。
 
 ✨ 值得带走的：
 · 慢一点也没关系。
@@ -499,7 +532,7 @@ def test_parse_handnote():
     from app import postcard
 
     parsed = postcard.parse_handnote(HANDNOTE)
-    assert parsed["theme"] == "学业压力与内卷焦虑"
+    assert parsed["theme"] == "减压安心之旅"
     assert parsed["message"] == "下次说说石头什么时候会变轻。"
     assert parsed["takeaways"] == ["慢一点也没关系。", "石头已经被看清了一些。", "说出来本身就是松动。"]
 
@@ -512,12 +545,20 @@ def test_parse_handnote_fallback():
     assert parsed["takeaways"]
 
 
+def test_postcard_renderer_has_no_legacy_fire_implementation():
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "app" / "postcard.py").read_text(encoding="utf-8")
+    for legacy in ("_draw_fire", "FIRE_ORANGE", "FIRE_YELLOW", "炉火", "火焰", "🪵", "🔥"):
+        assert legacy not in source
+
+
 def test_render_postcard_png():
     from app import postcard
 
     png = postcard.render_postcard(
         theme_label="减压安心之旅",
-        message="炉火会记得你说过的每一句话。",
+        message="圆桌会记得你说过的每一句话。",
         takeaways=["慢一点也没关系。", "石头已经被看清了一些。", "说出来本身就是松动。"],
         member_names=["苏轼", "牛顿", "苏晓", "小满"],
     )
@@ -601,7 +642,7 @@ def test_painting_strokes_and_reveal(monkeypatch):
 
     team = ["zengguofan", "einstein", "chenmo", "xiaoman"]
     strokes_msg = (
-        "【小晴】我希望画上有一炉深夜的火，光不要太亮，暖就好。\n"
+        "【小晴】我希望画上有一轮明亮的太阳，旁边有一张圆桌和几杯热茶。\n"
         "【曾国藩】我希望画上有江上的一叶小舟。\n"
         "【爱因斯坦】我想加上一盏还亮着的灯。\n"
         "【陈默】我想在这幅画上加上一条没走完的栈道。\n"
@@ -663,7 +704,7 @@ def _run_paced(chunks, **env):
 
 
 def test_pacer_preserves_content():
-    text = "【小晴】欢迎来到围炉。\n\n【苏轼】哈哈，我来烤火。\n\n【小满】我也是。\n"
+    text = "【小晴】欢迎来到圆桌。\n\n【苏轼】哈哈，我来喝杯热茶。\n\n【小满】我也是。\n"
     chunks = [text[i : i + 3] for i in range(0, len(text), 3)]
     out, _ = _run_paced(chunks, WEILU_PACE_CHAR_MS="1", WEILU_PACE_PAUSE_MS="10")
     assert out == text
@@ -693,7 +734,7 @@ FAKE_TURN = (
     "【苏轼】哈哈，我今天是来躲清静的。\n"
     "【小满】我……有点紧张，但很高兴坐在这里。\n"
     "【曾国藩】老夫惯常早睡，今天破例坐一坐。\n"
-    "【陈默】实验室刚出来，蹭个火。\n"
+    "【陈默】实验室刚出来，来桌边坐坐。\n"
     "【小晴】那我们开始今天的第一个问题吧。"
 )
 
@@ -706,7 +747,8 @@ def test_full_session_flow_with_fake_llm(monkeypatch):
     monkeypatch.setattr("app.director.generate", fake_generate)
     characters = load_characters()
 
-    messages = [{"role": "user", "content": "最近科研压力好大，导师一直催"}]
+    # 旧流程仍由其他主题使用；减压主题已切换到可停留的v2状态机。
+    messages = [{"role": "user", "content": "最近不知道自己真正想要什么"}]
 
     def run_plan():
         plan = director.plan_turn(messages)
@@ -757,7 +799,7 @@ def test_each_stage_introduces_activity():
     stages = cfg["stages"]
     pstages = cfg.get("painting_stages", {})
 
-    # 夜话各正式环节：小晴先介绍活动名称与目的
+    # 圆桌各正式环节：小晴先介绍活动名称与目的
     chat_names = {
         "ignite": "相似圈", "share": "主题分享", "depth": None,
         "persp": "交换视角", "heart": "真心话", "close": "总结与告别",
@@ -794,15 +836,60 @@ def test_stress_theme_routing_broad():
     assert detect_theme("我是谁，想要什么", themes)["id"] == "self"
 
 
-def test_stress_warm_opening_and_leader_brief_invite():
+def test_stress_v2_contract_and_three_consistent_peers():
     plan = director.plan_turn([{"role": "user", "content": "我想参加减压安心之旅"}])
-    assert plan.meta["stage"] == "invite" and plan.meta["theme"] == "academic"
-    warm = plan.meta.get("warm_opening") or ""
-    assert warm.startswith("【小晴】")
-    assert "不是心理治疗" in warm and "留在圆桌" in warm  # 三句口头约定在场
-    assert plan.meta.get("invite_members_silent") is True
-    assert "保持安静" in plan.system_prompt  # 成员本轮不发言，小晴代介绍
-    assert "本次为你召唤" not in plan.system_prompt
+    assert plan.meta["stage"] == "v2_contract" and plan.meta["theme"] == "academic"
+    assert plan.meta["v2"] is True and len(plan.meta["team"]) == 3
+    assert "虚构AI" in plan.system_prompt and "不是心理咨询或治疗" in plan.system_prompt
+    assert "被听见" in plan.system_prompt and "一次只处理一个主要互动任务" in plan.system_prompt
+    state = group_v2.reconstruct([{"role": "assistant", "content": plan.marker}])
+    assert state is not None and state.phase == 1 and len(state.team_ids) == 3
+
+
+def test_stress_v2_named_followup_stays_in_phase():
+    first = director.plan_turn([{"role": "user", "content": "科研压力很大，导师一直催"}])
+    messages = [
+        {"role": "user", "content": "科研压力很大，导师一直催"},
+        {"role": "assistant", "content": "【小晴】欢迎。\n" + first.marker},
+        {"role": "user", "content": f"{first.meta['team'][0]}，你刚才为什么不敢求助？"},
+    ]
+    follow = director.plan_turn(messages)
+    state = group_v2.reconstruct([{"role": "assistant", "content": follow.marker}])
+    assert follow.meta["v2"] is True and state is not None
+    assert state.phase == 1 and state.mode == "focus" and state.focus
+
+
+def test_stress_v2_only_explicit_advance_changes_phase():
+    first = director.plan_turn([{"role": "user", "content": "最近压力很大"}])
+    base = [
+        {"role": "user", "content": "最近压力很大"},
+        {"role": "assistant", "content": "【小晴】欢迎。\n" + first.marker},
+    ]
+    stay = director.plan_turn(base + [{"role": "user", "content": "我想先被听见"}])
+    stay_state = group_v2.reconstruct([{"role": "assistant", "content": stay.marker}])
+    assert stay_state is not None and stay_state.phase == 1
+    advance = director.plan_turn(base + [{"role": "user", "content": "可以进入下一项"}])
+    advance_state = group_v2.reconstruct([{"role": "assistant", "content": advance.marker}])
+    assert advance_state is not None and advance_state.phase == 2
+
+
+def test_v2_roundtable_note_is_visual_and_safe():
+    from app import report_v2_html
+
+    data = report_v2_html.render({
+        "approach_moment": "你追问南枝为什么不拒绝，她第一次说出了怕不被需要。",
+        "user_impact": "你说拒绝不等于抛下别人，南枝重新理解了边界。",
+        "member_impact": "你确认陈默的停顿让自己愿意慢一点说。",
+        "differences": ["先停下来照顾身体", "先完成一个最小动作"],
+        "response_need": "先听我说完，再问我要不要办法。",
+        "real_world_phrase": "我现在不需要办法，能先听我说五分钟吗？",
+        "pressure_before": 8, "pressure_after": 6,
+        "leader_note": "这场圆桌留下的不是统一答案，而是更清楚的需要。",
+    }, ["林之衡", "许南枝", "陈默"])
+    text = data.decode("utf-8")
+    assert "roundtable" in text and "你的话影响了谁" in text and "⇄" in text
+    assert "林之衡" in text and "虚构合成AI角色" in text
+    assert "心理评估" in text and "@media(max-width:520px)" in text
 
 
 def test_stress_ignite_intro_weather():
@@ -827,8 +914,8 @@ def test_stress_depth_has_normalization():
 
 def _stress_msgs_to(round_no: int) -> list[dict]:
     """构造进行到第 round_no 轮（不含该轮标记）的会话历史。"""
-    labels = {1: "相邀", 2: "开场", 3: "圆桌入话", 4: "圆桌深谈", 5: "交换视角",
-              6: "真心话", 7: "临别赠言"}
+    labels = {1: "相邀", 2: "自我介绍与天气站", 3: "压力地图", 4: "深谈·正常化", 5: "呼吸站",
+              6: "真心话", 7: "我的减压清单"}
     fills = {1: "开始吧", 2: "论文改不完", 3: "肩膀紧、心里像阴天", 4: "最沉的是怕来不及",
              5: "怕自己不行", 6: "谢谢大家", 7: "嗯"}
     msgs = [{"role": "user", "content": "我想参加减压安心之旅"}]
@@ -853,7 +940,7 @@ def test_stress_persp_is_breathing_station():
 
 def test_progress_line_format():
     assert director.progress_line(3, "压力地图") == "📍 环节 3/8 · 压力地图｜还剩5个环节"
-    assert director.progress_line(8, "成长手记") == "📍 环节 8/8 · 成长手记｜本场最后一环"
+    assert director.progress_line(8, "成长报告") == "📍 环节 8/8 · 成长报告｜本场最后一环"
 
 
 def test_finalize_appends_marker_progress_and_card():

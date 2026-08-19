@@ -1,4 +1,4 @@
-# 围炉夜话 Nginx 配置示例
+# 清心圆桌 Nginx 配置示例
 # 方案A（推荐）：新子域名 weilu.example.com，新增一个 server 块
 # 方案B：复用现有域名，在现有 server 块里加 location /weilu/（见文件末尾注释）
 # SSE 需要关闭缓冲，超时给足（团体一轮生成可达 60s+）

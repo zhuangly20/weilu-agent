@@ -12,7 +12,10 @@ PERSONALITY_CN = {
 }
 
 # 全局禁词（对抗AI谄媚与医疗化表述）
-FORBIDDEN_WORDS = ("治愈", "诊断", "你一定会好", "心理咨询", "治疗", "抑郁症", "今晚")
+FORBIDDEN_WORDS = (
+    "治愈", "诊断", "你一定会好", "心理咨询", "治疗", "抑郁症",
+    "今晚", "围炉", "炉火", "火炉", "火焰", "夜话", "深夜", "夜里", "小屋", "🔥", "🪵",
+)
 
 # 每轮发言总字数上限（report 轮除外）
 TURN_TOTAL_LIMIT = 480
@@ -114,7 +117,7 @@ def build_invite_system_prompt(
         )
     else:
         scheme = (
-            f"- 玩法：**{theme_label}·夜话**。大家围着圆桌文字畅聊，"
+            f"- 玩法：**{theme_label}·圆桌活动**。大家围着圆桌文字畅聊，"
             "一共8轮环节，从相识到真心话，每轮都轻巧不费力\n"
             "- 节奏：每轮小晴会请两三位不同的桌友发言，不是每轮全员都说话；"
             "想听谁多说两句，随时点名\n"
@@ -152,7 +155,7 @@ def build_invite_system_prompt(
             "【输出格式（必须严格遵守）】\n"
             f"- 本轮只有【{LEADER_NAME}】发言，每段话单独一行，以【{LEADER_NAME}】开头\n"
             "- 全轮合计260-380字；不写旁白、不用markdown加粗\n"
-            "- 不得出现\"今晚/深夜/夜里\"等夜晚时间词，统一用\"这场/今天/本场\"\n"
+            "- 不得使用旧产品意象或夜晚时间词；时间表达统一用\"这场/今天/本场\"\n"
             "- 介绍桌友只介绍其人，不评价同学、不提问\n"
             "- 禁止出现：治愈、诊断、治疗、心理咨询",
         ]
@@ -177,7 +180,7 @@ def build_invite_system_prompt(
             f"- 小晴的每段话单独一行，以【{LEADER_NAME}】开头；"
             "每位桌友的自我介绍各占一行，以【姓名】开头\n"
             "- 全轮合计260-380字；不写旁白、不用markdown加粗\n"
-            "- 不得出现\"今晚/深夜/夜里\"等夜晚时间词，统一用\"这场/今天/本场\"\n"
+            "- 不得使用旧产品意象或夜晚时间词；时间表达统一用\"这场/今天/本场\"\n"
             "- 桌友介绍只谈自己（身份背景+今天带来什么），不评价同学、不提问\n"
             "- 禁止出现：治愈、诊断、治疗、心理咨询",
         ]
@@ -198,7 +201,7 @@ def build_encore_system_prompt(leader_cfg: dict, theme_label: str) -> str:
             f"3) 如果同学还想和某位桌友说话，温和说明可以下一场点名请TA来"
             f"（本场主题：{theme_label}）。",
             "【输出格式】只有【小晴】发言，一行或几行均可，合计不超过90字；"
-            "不写旁白、不用markdown；不得出现\"今晚/深夜/夜里\"等夜晚时间词；"
+            "不写旁白、不用markdown；不得使用旧产品意象或夜晚时间词；"
             "禁止出现：治愈、诊断、治疗、心理咨询。",
         ]
     )
@@ -314,8 +317,8 @@ def _chat_stage_instruction(stage_id: str, theme: dict, team: list[dict]) -> str
                 "把压力先放一放，跟小晴做一分钟腹式呼吸；做完，桌友再给你的压力"
                 "换一种讲法。如果此刻不方便深呼吸，跟着看就好，不用勉强。\n"
                 "2) 小晴用4-6行慢节奏短句带呼吸引导（每行都以【小晴】开头，一行一事）："
-                "先请同学坐稳、把肩膀松下来；然后\"用鼻子慢慢吸气——1、2、3\"→"
-                "\"停一下\"→\"用嘴慢慢呼气——1、2、3\"→再带一轮→"
+                "先请同学坐稳、把肩膀松下来，一只手轻轻放在腹部；然后\"用鼻子慢慢吸气——感受腹部轻轻鼓起，1、2、3\"→"
+                "\"停一下\"→\"用嘴慢慢呼气——感受腹部慢慢回落，1、2、3\"→再带一轮→"
                 "末句\"动动手指和脚趾，慢慢回来\"。\n"
                 f"3) {dp_hist} 用白话讲一个道理并给同学的压力换个讲法（50-80字）："
                 "人一慌，情绪脑会把负责思考的脑区挤下线，所以会觉得\"脑子空白、"
@@ -455,7 +458,7 @@ def build_turn_system_prompt(
             *[_member_block(m) for m in team],
             "【团体铁律】\n"
             "- 所有人的发言里不得出现这些词：治愈、诊断、治疗、心理咨询、你一定会好\n"
-            "- 不得出现\"今晚/深夜/夜里\"等夜晚时间词，统一用\"这场/今天/本场\"\n"
+            "- 不得使用旧产品意象或夜晚时间词；时间表达统一用\"这场/今天/本场\"\n"
             "- 成员只讲自己的经历与感受，不评价用户、不建议、不提问\n"
             "- 如果同学直接向某位成员提问，该成员先正面回应这个问题"
             "（简短、真诚，可以只说自己的真实感受），再分享自己的经历；"
@@ -506,7 +509,7 @@ def build_report_system_prompt(leader_cfg: dict, theme: dict) -> str:
                 "\"encouragement\": \"想对同学说的鼓励，40字内，温暖、不说教、不承诺改变\",",
                 "\"pressure_before\": 同学开场报过的压力分数（0-10的整数），没有则填 null",
                 "}",
-                "【硬规则】不得出现：治愈、诊断、治疗、心理咨询；不得虚构同学没说过的话；"
+                "【硬规则】不得出现：治愈、诊断、治疗、心理咨询、围炉、炉火、火炉、火焰、夜话、深夜、夜里、小屋；不得虚构同学没说过的话；"
                 "成员没留下减压方法时，tip 里写TA本场说过一句代表的话。",
                 f"【本场主题】{theme['full_label']}；提取侧重：{theme['report_focus']}。",
             ]
@@ -517,12 +520,12 @@ def build_report_system_prompt(leader_cfg: dict, theme: dict) -> str:
             _leader_block(leader_cfg),
             "【输出格式（必须严格遵守，逐行输出）】",
             "【小晴】（把一份手写便签放到你手边）这是今天的成长手记——",
-            "🕯 本场主题：…",
-            "🪵 你带来的：…（2-3句，只能基于对话记录里真人同学真实说过的话，不得虚构）",
-            "🔥 桌友们的回响：…（2-3句，概括成员们带来的共鸣与视角，点到1-2位成员的名字）",
+            "📝 本场主题：…",
+            "🫧 你带来的：…（2-3句，只能基于对话记录里真人同学真实说过的话，不得虚构）",
+            "💬 桌友们的回响：…（2-3句，概括成员们带来的共鸣与视角，点到1-2位成员的名字）",
             "✨ 值得带走的：…（3句话，每句一行，以 · 开头，可化用本场对话里的表达）",
             "🌱 留给下次的：…（1句开放式邀请，不说教、不布置任务）",
-            "【规则】全文300字以内；不得出现：治愈、诊断、治疗、心理咨询；"
+            "【规则】全文300字以内；不得出现：治愈、诊断、治疗、心理咨询、围炉、炉火、火炉、火焰、夜话、深夜、夜里、小屋；"
             "不承诺改变；语气像朋友写的便签，不是报告。\n"
             "如果对话记录里同学报过心情分数（1-10打分），在\"值得带走的\"之后"
             "加一行\"🌡 心情温度：开场X分 → 现在？\"（？处可温和地留给同学自己填）；"
@@ -544,8 +547,13 @@ def build_resource_card(resources: dict, public_base: str) -> str:
     return "\n".join(lines)
 
 
+def forbidden_word_issues(text: str) -> list[str]:
+    """检查所有会公开给同学的文本是否带有旧产品或医疗化用语。"""
+    return [f"forbidden-word:{word}" for word in FORBIDDEN_WORDS if word in text]
+
+
 def validate_turn(text: str, allowed_names: list[str], min_members: int = 0) -> list[str]:
-    """输出校验（流式路径用于事后监测，非流式路径用于重试决策）。"""
+    """校验普通团体发言，用于非流式重试和流式发布前检查。"""
     issues: list[str] = []
     names = LINE_RE.findall(text)
     if not names:
@@ -560,9 +568,7 @@ def validate_turn(text: str, allowed_names: list[str], min_members: int = 0) -> 
             member_lines += 1
     if member_lines < min_members:
         issues.append(f"too-few-members:{member_lines}<{min_members}")
-    for word in FORBIDDEN_WORDS:
-        if word in text:
-            issues.append(f"forbidden-word:{word}")
+    issues.extend(forbidden_word_issues(text))
     if LEADER_NAME not in names:
         issues.append("leader-missing")
     if len(text) > TURN_TOTAL_LIMIT * 1.6:

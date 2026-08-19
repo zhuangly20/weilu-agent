@@ -178,6 +178,15 @@ themes:
   persp_variant: breathing
   leave_coping_tip: true
   report_variant: html
+  stage_labels:
+    invite: 相邀
+    ignite: 自我介绍与天气站
+    share: 压力地图
+    depth: 深谈·正常化
+    persp: 呼吸站
+    heart: 真心话
+    close: 我的减压清单
+    report: 成长报告
   icebreak: 最近哪件事让你的压力悄悄变大了？学业、科研、关系、家里的事，都可以说说。
   activity: 压力来的时候，你的身体和心情分别是什么信号？哪里先紧起来、情绪像什么天气？
   closing_question: 这块压力里，最沉的是哪一部分？

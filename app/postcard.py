@@ -18,8 +18,8 @@ CREAM_BOTTOM = (255, 231, 205)
 INK = (90, 70, 54)            # 主文字·暖棕
 PAPER = INK
 PAPER_DIM = (166, 137, 110)   # 次级文字
-FIRE_ORANGE = (240, 96, 60)   # 珊瑚橘
-FIRE_YELLOW = (255, 196, 107)
+CORAL = (240, 96, 60)         # 珊瑚橘
+SUNLIGHT = (255, 196, 107)
 GOLD = (232, 154, 43)         # 暖金
 PURPLE = (155, 126, 222)      # 小清心紫
 SOFT_PINK = (244, 156, 187)   # 小清心粉
@@ -49,7 +49,7 @@ def parse_handnote(text: str) -> dict:
     takeaways: list[str] = []
     for line in text.splitlines():
         s = line.strip()
-        m = re.match(r"^[🕯🪵🔥✨🌱]\s*([^：:]+)[：:]\s*(.*)$", s)
+        m = re.match(r"^[📝🫧💬✨🌱]\s*([^：:]+)[：:]\s*(.*)$", s)
         if m:
             current = m.group(1).strip()
             sections[current] = m.group(2).strip()
@@ -77,7 +77,7 @@ def _draw_background(img: Image.Image) -> None:
         draw.line([(0, y), (W, y)], fill=c)
     # 暖色小点缀（固定种子，风格取自小清心四色）
     rng = random.Random(2026)
-    palette = [GOLD, PURPLE, SOFT_PINK, FIRE_ORANGE]
+    palette = [GOLD, PURPLE, SOFT_PINK, CORAL]
     for i in range(46):
         x, y = rng.randint(0, W), rng.randint(0, int(H * 0.6))
         r = rng.choice([3, 4, 5, 6])
@@ -92,21 +92,16 @@ def _draw_background(img: Image.Image) -> None:
     img.alpha_composite(glow.filter(ImageFilter.GaussianBlur(60)))
 
 
-def _draw_fire(draw: ImageDraw.ImageDraw) -> None:
-    cx, base = W // 2, H - 230
-    # 柴
-    draw.line([(cx - 150, base + 30), (cx + 150, base + 6)], fill=(138, 90, 52), width=34)
-    draw.line([(cx - 150, base + 64), (cx + 150, base + 40)], fill=(160, 106, 63), width=34)
-    # 火焰
-    draw.polygon(
-        [(cx, base - 170), (cx + 62, base - 40), (cx + 20, base + 18), (cx - 20, base + 18), (cx - 62, base - 40)],
-        fill=FIRE_ORANGE,
-    )
-    draw.polygon(
-        [(cx, base - 104), (cx + 30, base - 30), (cx - 30, base - 30)],
-        fill=FIRE_YELLOW,
-    )
-
+def _draw_roundtable(draw: ImageDraw.ImageDraw) -> None:
+    """绘制阳光暖房里的圆桌与绿植小景。"""
+    cx, base = W // 2, H - 245
+    draw.ellipse([cx - 230, base - 36, cx + 230, base + 88], fill=(206, 151, 104), outline=GOLD, width=5)
+    draw.ellipse([cx - 194, base - 20, cx + 194, base + 53], fill=(255, 237, 211))
+    draw.ellipse([cx - 34, base - 3, cx + 34, base + 34], fill=SUNLIGHT)
+    draw.arc([cx - 78, base - 34, cx + 78, base + 54], 200, 340, fill=CORAL, width=7)
+    for dx, dy, color in ((-270, 5, PURPLE), (-242, -48, SOFT_PINK), (242, -48, (105, 184, 153)), (270, 5, GOLD)):
+        draw.ellipse([cx + dx - 17, base + dy - 28, cx + dx + 17, base + dy + 28], fill=color)
+        draw.line([(cx + dx, base + dy + 18), (cx + dx, base + dy + 55)], fill=(91, 133, 92), width=5)
 
 def _wrap(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_w: int) -> list[str]:
     lines, buf = [], ""
@@ -161,8 +156,7 @@ def render_postcard(
             draw.text((x, y), line, font=_font(42), fill=PAPER)
         y += 64
 
-    # 炉火
-    _draw_fire(draw)
+    _draw_roundtable(draw)
     # 落款
     draw.text((W // 2, H - 108), f"小晴 与 {'、'.join(member_names)}", font=_font(34),
               fill=PAPER_DIM, anchor="ma")

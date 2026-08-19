@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 围炉夜话 · 服务器一键部署脚本（在有 Docker 的服务器上运行）
+# 清心圆桌 · 服务器一键部署脚本（在有 Docker 的服务器上运行）
 #
 # 用法：
 #   bash setup-on-server.sh <git仓库URL> <子域名> [安装目录，默认/opt/weilu-agent]

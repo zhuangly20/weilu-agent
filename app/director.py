@@ -12,8 +12,14 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import prompts, safety
-from .config import ProviderConfig, load_characters, load_settings, load_theme_config
+from . import group_v2, prompts, safety
+from .config import (
+    ProviderConfig,
+    load_characters,
+    load_group_v2_config,
+    load_settings,
+    load_theme_config,
+)
 from .llm import generate, stream_generate
 from .session import (
     ENDED,
@@ -54,6 +60,11 @@ STAGE_MIN_MEMBERS_PAINTING = {
 STROKE_LINE_RE = None  # 延迟初始化，见 extract_strokes
 
 
+def _stage_label(theme: dict, stage_id: str, stages: dict) -> str:
+    """优先采用主题专属环节名，其他主题沿用共用阶段标签。"""
+    return str((theme.get("stage_labels") or {}).get(stage_id) or stages[stage_id]["label"])
+
+
 def progress_line(round_no: int, stage_label: str) -> str:
     """用户可见的环节进度行（代码追加，格式固定）。"""
     if round_no >= TOTAL_ROUNDS:
@@ -68,8 +79,12 @@ def _finalize_body(plan: "TurnPlan", body: str) -> str:
     parts = [body]
     if plan.marker:
         parts.append(plan.marker)
-        parts.append(progress_line(int(plan.meta.get("round") or 1),
-                                   str(plan.meta.get("stage_label") or "环节")))
+        if plan.meta.get("v2"):
+            parts.append(f"📍 当前活动：{plan.meta.get('stage_label') or '团体讨论'}"
+                         "｜可以继续聊、点名团友、请小晴收一下，或进入下一项")
+        else:
+            parts.append(progress_line(int(plan.meta.get("round") or 1),
+                                       str(plan.meta.get("stage_label") or "环节")))
     if plan.meta.get("resource_card_text"):
         parts.append(plan.meta["resource_card_text"])
     return "\n\n".join(p for p in parts if p.strip())
@@ -94,6 +109,26 @@ def _parse_report_json(text: str) -> dict | None:
     obj.setdefault("encouragement", "")
     obj.setdefault("pressure_before", None)
     return obj
+
+
+def _report_fields_policy_issues(fields: dict) -> list[str]:
+    """报告字段会进入 HTML 与明信片，因此在渲染前统一检查。"""
+    return prompts.forbidden_word_issues(json.dumps(fields, ensure_ascii=False))
+
+
+def _safe_report_fallback() -> str:
+    """供应商异常或违反公开文案边界时使用的安全报告回退。"""
+    return "\n".join([
+        "【小晴】（把一份手写便签放到你手边）这是今天的成长手记——",
+        "📝 本场主题：清心圆桌活动",
+        "🫧 你带来的：你认真把这一场的感受放到了圆桌上。",
+        "💬 桌友们的回响：大家用自己的经历，陪你把话说完整。",
+        "✨ 值得带走的：",
+        "· 慢一点，也没关系。",
+        "· 先照顾身体，再处理眼前的事。",
+        "· 把想法说出来，给自己一点空间。",
+        "🌱 留给下次的：下次想从哪一件小事开始聊？",
+    ])
 
 
 @dataclass
@@ -131,7 +166,7 @@ def build_digest(messages: list[dict], char_cap: int = 2600) -> str:
         if role == "user":
             entries.append(f"同学：{text[:200]}")
         else:
-            body = MARKER_RE.sub("", text).strip()
+            body = group_v2.MARKER_RE.sub("", MARKER_RE.sub("", text)).strip()
             lines = [ln.strip() for ln in body.splitlines() if ln.strip()][:8]
             snippet = " / ".join(ln[:90] for ln in lines)
             entries.append(f"团体：{snippet[:600]}")
@@ -250,6 +285,7 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
     last_user = user_texts[-1] if user_texts else ""
     seed_text = user_texts[0] if user_texts else ""
 
+    v2_state = group_v2.reconstruct(messages)
     state = reconstruct(messages)
 
     # 危机检测（high 立即脚本化响应，不推进状态）
@@ -257,6 +293,9 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
     if crisis == "high":
         return TurnPlan(kind="scripted", script=safety.aid_reply(),
                         meta={"stage": state.stage, "crisis": "high"})
+
+    if v2_state is not None:
+        return _v2_plan(messages, last_user, v2_state, crisis)
 
     if state.stage == GREETING:
         form = detect_form(last_user)
@@ -270,6 +309,13 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
                 script=prompts.MENU_RETRY_TEXT if has_history else prompts.GREETING_TEXT,
                 meta={"stage": GREETING, "crisis": crisis},
             )
+        if theme.get("id") == "academic" and form == FORM_CHAT:
+            team_ids, card_ids = group_v2.select_team(seed_text or last_user)
+            initial = group_v2.GroupState(
+                phase=1, mode="main", focus="", exchanges=0,
+                team_ids=team_ids, card_ids=card_ids,
+            )
+            return _v2_plan(messages, last_user, initial, crisis, initial_open=True)
         return _invite_plan(messages, last_user, theme, form, leader_cfg, characters, seed_text, crisis)
 
     if state.stage == ENDED:
@@ -342,7 +388,8 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
         if is_confirm(last_user) or len(last_user.strip()) >= GREETING_MIN_LEN:
             # 明确确认，或实质性发言（视为默许阵容、把话接进开场）
             label_cfg = themes_cfg.get("painting_stages", {}) if state.form == FORM_PAINTING else themes_cfg["stages"]
-            marker = make_marker(2, label_cfg["ignite"]["label"], theme["label"], state.form, team_ids)
+            stage_label = _stage_label(theme, "ignite", label_cfg)
+            marker = make_marker(2, stage_label, theme["label"], state.form, team_ids)
             system_prompt = prompts.build_turn_system_prompt(
                 leader_cfg, team, "ignite", theme, themes_cfg["stages"], 2,
                 form=state.form, painting_stages_cfg=themes_cfg.get("painting_stages"),
@@ -355,7 +402,7 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
                 kind="generate", system_prompt=system_prompt, user_content=user_content,
                 marker=marker,
                 meta={"stage": "ignite", "round": 2, "theme": theme["id"], "theme_label": theme["label"],
-                      "form": state.form, "team": [m["name"] for m in team], "crisis": crisis},
+                      "form": state.form, "team": [m["name"] for m in team], "stage_label": stage_label, "crisis": crisis},
             )
         # 没听清：轻量重问，不推进状态
         return TurnPlan(kind="scripted", script=prompts.SEAT_REASK_TEXT,
@@ -367,7 +414,8 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
     round_no = state.next_round
     stage_id = table[round_no]
     label_cfg = themes_cfg.get("painting_stages", {}) if form == FORM_PAINTING else themes_cfg["stages"]
-    marker = make_marker(round_no, label_cfg[stage_id]["label"], theme["label"], form, team_ids)
+    stage_label = _stage_label(theme, stage_id, label_cfg)
+    marker = make_marker(round_no, stage_label, theme["label"], form, team_ids)
 
     if stage_id == "report":
         system_prompt = prompts.build_report_system_prompt(leader_cfg, theme)
@@ -387,7 +435,7 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
         kind="generate", system_prompt=system_prompt, user_content=user_content,
         marker=marker,
         meta={"stage": stage_id, "round": round_no, "theme": theme["id"], "theme_label": theme["label"],
-              "form": form, "team": [m["name"] for m in team], "stage_label": label_cfg[stage_id]["label"],
+              "form": form, "team": [m["name"] for m in team], "stage_label": stage_label,
               "crisis": crisis},
     )
     if form == FORM_CHAT and stage_id == "persp" and theme.get("persp_variant") == "breathing":
@@ -401,6 +449,38 @@ def plan_turn(messages: list[dict]) -> TurnPlan:
     if pp:
         plan.meta["painting_prompt"] = pp
     return plan
+
+
+def _v2_plan(
+    messages: list[dict], last_user: str, current: group_v2.GroupState,
+    crisis: str | None, initial_open: bool = False,
+) -> TurnPlan:
+    """减压安心之旅v2：用户明确推进前保持阶段，点名/反馈进入支线。"""
+    cfg = load_theme_config()
+    if initial_open:
+        state, action = current, "open"
+    else:
+        state, action = group_v2.next_state(last_user, current)
+    phase_cfg = load_group_v2_config()["phases"][state.phase - 1]
+    system_prompt = (
+        group_v2.build_report_prompt(state)
+        if action == "close_report"
+        else group_v2.build_system_prompt(state, action)
+    )
+    extra = safety.medium_empathy_instruction() if crisis == "medium" else ""
+    user_content = group_v2.build_user_content(messages, last_user)
+    if extra:
+        user_content += "\n\n【安全优先提示】\n" + extra
+    return TurnPlan(
+        kind="generate", system_prompt=system_prompt, user_content=user_content,
+        marker=group_v2.marker(state),
+        meta={
+            "v2": True, "stage": f"v2_{phase_cfg['id']}", "round": state.phase,
+            "theme": "academic", "theme_label": "减压安心之旅", "form": FORM_CHAT,
+            "team": group_v2.member_names(state), "stage_label": phase_cfg["label"],
+            "action": action, "report_v2": action == "close_report", "crisis": crisis,
+        },
+    )
 
 
 def _interaction_note(last_user: str, team: list[dict], at_seat: bool = False) -> str:
@@ -488,11 +568,14 @@ async def _generate_report_fields(
         for temp in (0.6, 0.3):
             text = await generate(providers, llm_messages, temperature=temp, max_tokens=900)
             fields = _parse_report_json(text)
-            if fields is not None:
+            if fields is not None and not _report_fields_policy_issues(fields):
                 return text, fields
     except Exception:
         pass
-    return await _legacy_report(plan, providers), None
+    fallback = await _legacy_report(plan, providers)
+    if prompts.forbidden_word_issues(fallback):
+        fallback = _safe_report_fallback()
+    return fallback, None
 
 
 def _report_display_text(fields: dict) -> str:
@@ -551,6 +634,22 @@ def _report_attachments(plan: TurnPlan, fields: dict) -> list[dict]:
     return attachments
 
 
+def _v2_report_attachment(plan: TurnPlan, fields: dict) -> list[dict]:
+    """新版《圆桌留笺》单HTML附件。"""
+    from . import files, report_v2_html
+
+    try:
+        data = report_v2_html.render(fields, list(plan.meta.get("team", [])))
+        token = files.put(data, mime="text/html", ext="html", ttl=24 * 3600)
+        return [{
+            "fileUrl": f"{load_settings().public_base_url}/files/{token}",
+            "fileName": "清心圆桌·圆桌留笺.html", "fileType": "file",
+            "mimeType": "text/html", "fileSize": len(data),
+        }]
+    except Exception:
+        return []
+
+
 async def execute_plan(
     plan: TurnPlan, providers: list[ProviderConfig]
 ) -> tuple[str, list[str], list[dict]]:
@@ -574,13 +673,33 @@ async def execute_plan(
     img_task = None
     if plan.meta.get("painting_prompt"):
         img_task = asyncio.create_task(imagegen.generate_painting(plan.meta["painting_prompt"]))
+    if plan.meta.get("report_v2"):
+        fields = None
+        for temp in (0.4, 0.2):
+            try:
+                raw = await generate(providers, llm_messages, temperature=temp, max_tokens=700)
+                candidate = _parse_report_json(raw)
+                if candidate is not None and not _report_fields_policy_issues(candidate):
+                    fields = candidate
+                    break
+            except Exception:
+                continue
+        fields = fields or {
+            "approach_moment": "未形成", "user_impact": "未形成",
+            "member_impact": "未确认", "differences": [],
+            "response_need": "未明确", "real_world_phrase": "这次先不带行动离开",
+            "pressure_before": None, "pressure_after": None,
+            "leader_note": "谢谢你认真参与这场圆桌。",
+        }
+        body = "【小晴】我们今天先在这里离桌。你的《圆桌留笺》已经整理好，附件里可以打开。"
+        return _finalize_body(plan, body), [], _v2_report_attachment(plan, fields)
     if plan.meta.get("report_html"):
         text, fields = await _generate_report_fields(plan, providers)
         if fields is not None:
             body = _report_display_text(fields)
             attachments = _report_attachments(plan, fields)
             return _finalize_body(plan, body), [], attachments
-        # JSON 解析失败 → text 已是旧版文本手记，走下方通用流程
+        # JSON 解析失败 → text 已是经策略检查的文本成长手记。
         body = text.strip()
         attachments = build_attachments(plan, body)
         return _finalize_body(plan, body), [], attachments
@@ -640,6 +759,36 @@ async def stream_plan(
     if plan.meta.get("painting_prompt"):
         img_task = asyncio.create_task(imagegen.generate_painting(plan.meta["painting_prompt"]))
 
+    if plan.meta.get("report_v2"):
+        fields = None
+        for temp in (0.4, 0.2):
+            try:
+                raw = await generate(providers, llm_messages, temperature=temp, max_tokens=700)
+                candidate = _parse_report_json(raw)
+                if candidate is not None and not _report_fields_policy_issues(candidate):
+                    fields = candidate
+                    break
+            except Exception:
+                continue
+        fields = fields or {
+            "approach_moment": "未形成", "user_impact": "未形成",
+            "member_impact": "未确认", "differences": [],
+            "response_need": "未明确", "real_world_phrase": "这次先不带行动离开",
+            "pressure_before": None, "pressure_after": None,
+            "leader_note": "谢谢你认真参与这场圆桌。",
+        }
+        display = "【小晴】我们今天先在这里离桌。你的《圆桌留笺》已经整理好，附件里可以打开。"
+        async for delta in paced_text(display):
+            yield "delta", delta
+        attachments = _v2_report_attachment(plan, fields)
+        if attachments:
+            yield "attachments", attachments
+        final = _finalize_body(plan, display)
+        if len(final) > len(display):
+            yield "delta", final[len(display):]
+        yield "final", final
+        return
+
     if plan.meta.get("report_html"):
         text, fields = await _generate_report_fields(plan, providers)
         display = _report_display_text(fields) if fields is not None else text.strip()
@@ -673,7 +822,6 @@ async def stream_plan(
             **pace_kwargs,
         ):
             collected.append(delta)
-            yield "delta", delta
     except Exception:
         if img_task is not None:
             img_task.cancel()
@@ -683,6 +831,12 @@ async def stream_plan(
             yield "final", prompts.LLM_FALLBACK_TEXT
             return
     body = "".join(collected).strip()
+    issues = prompts.forbidden_word_issues(body)
+    if issues:
+        body = prompts.LLM_FALLBACK_TEXT
+    visible = streamed_prefix + body
+    async for delta in paced_text(visible):
+        yield "delta", delta
     attachments: list[dict] = []
     if img_task is not None:
         img = await img_task
@@ -692,9 +846,9 @@ async def stream_plan(
     if attachments:
         yield "attachments", attachments
     final = _finalize_body(plan, body)
-    tail = final[len(streamed_prefix):] if final.startswith(streamed_prefix) else final
-    if len(tail) > len(body):
-        yield "delta", tail[len(body):]
+    tail = final[len(visible):] if final.startswith(visible) else final
+    if tail:
+        yield "delta", tail
     yield "final", final
 
 
