@@ -916,6 +916,19 @@ def test_v2_opening_hands_turn_to_peer_not_leader_interview():
     assert "不能预告‘我会回来问你’" in prompt
 
 
+def test_v2_opening_handoff_validator_rejects_stranded_user():
+    first = director.plan_turn([{"role": "user", "content": "我想参加减压安心之旅"}])
+    plan = director.plan_turn([
+        {"role": "user", "content": "我想参加减压安心之旅"},
+        {"role": "assistant", "content": first.script},
+        {"role": "user", "content": "我叫凌云，博六，最近压力很大"},
+    ])
+    stranded = "【林之衡】我也会慌。\n【许南枝】事情叠在一起很累。\n【陈默】我知道那种悬着。"
+    handed = stranded + "\n【小晴】我听见大家都在谈悬着。之衡，你来接。\n【林之衡】凌云，哪一块最想先讲给我们听？"
+    assert director._v2_opening_handoff_ok(stranded, plan) is False
+    assert director._v2_opening_handoff_ok(handed, plan) is True
+
+
 def test_v2_phase8_next_closes_and_requests_html():
     state = group_v2.GroupState(
         phase=8, mode="main", exchanges=1,

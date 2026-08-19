@@ -115,6 +115,48 @@ def _report_fields_policy_issues(fields: dict) -> list[str]:
     return prompts.forbidden_word_issues(json.dumps(fields, ensure_ascii=False))
 
 
+def _v2_opening_handoff_ok(text: str, plan: "TurnPlan") -> bool:
+    """Opening interaction must visibly hand the floor from leader to one peer."""
+    if not (plan.meta.get("v2") and plan.meta.get("round") == 1
+            and plan.meta.get("action") == "discuss"):
+        return True
+    speakers = re.findall(r"^【([^】]+)】", text, re.MULTILINE)
+    if prompts.LEADER_NAME not in speakers or not speakers:
+        return False
+    last_leader = len(speakers) - 1 - speakers[::-1].index(prompts.LEADER_NAME)
+    if last_leader >= len(speakers) - 1 or speakers[-1] not in plan.meta.get("team", []):
+        return False
+    final_block = text.rsplit(f"【{speakers[-1]}】", 1)[-1]
+    return "？" in final_block or "?" in final_block
+
+
+async def _generate_v2_opening_handoff(
+    plan: "TurnPlan", providers: list[ProviderConfig], messages: list[dict[str, str]],
+) -> str:
+    """Buffer and validate the one turn where a missing cue strands the user."""
+    last = ""
+    for attempt in range(2):
+        current = messages
+        if attempt:
+            current = [
+                messages[0],
+                {"role": "user", "content": messages[1]["content"] + (
+                    "\n\n上一次结构不完整，请重写整轮：团友短回应后，小晴总结并明确交棒；"
+                    "最后必须由一位团友向真人问一个具体、容易回答的问题。"
+                )},
+            ]
+        last = await generate(providers, current, temperature=0.72, max_tokens=800)
+        if _v2_opening_handoff_ok(last, plan):
+            return last
+    # Deterministic last resort: never leave the participant without a turn cue.
+    peer = (plan.meta.get("team") or ["团友"])[0]
+    return last.rstrip() + (
+        "\n【小晴】我先收一下：大家都从自己的经历靠近了你，也看见你把几重压力直接说出来的勇气。"
+        f"我把话筒交给{peer}，我们先沿着一条线听。"
+        f"\n【{peer}】你刚才说的几件事里，哪一件最让你想先讲给我们听？也可以说“我先听”。"
+    )
+
+
 def _safe_report_fallback() -> str:
     """供应商异常或违反公开文案边界时使用的安全报告回退。"""
     return "\n".join([
@@ -710,7 +752,11 @@ async def execute_plan(
         body = text.strip()
         attachments = build_attachments(plan, body)
         return _finalize_body(plan, body), [], attachments
-    turn_tokens = 500 if plan.meta.get("v2") else 1200
+    if (plan.meta.get("v2") and plan.meta.get("round") == 1
+            and plan.meta.get("action") == "discuss"):
+        text = await _generate_v2_opening_handoff(plan, providers, llm_messages)
+        return _finalize_body(plan, text.strip()), [], []
+    turn_tokens = 800 if plan.meta.get("v2") else 1200
     text = await generate(providers, llm_messages, temperature=0.85, max_tokens=turn_tokens)
     issues = prompts.validate_turn(text, allowed, min_members)
     if issues and plan.meta.get("stage") != "report":
@@ -814,6 +860,17 @@ async def stream_plan(
         yield "final", final
         return
 
+    if (plan.meta.get("v2") and plan.meta.get("round") == 1
+            and plan.meta.get("action") == "discuss"):
+        display = (await _generate_v2_opening_handoff(plan, providers, llm_messages)).strip()
+        async for delta in paced_text(display):
+            yield "delta", delta
+        final = _finalize_body(plan, display)
+        if len(final) > len(display):
+            yield "delta", final[len(display):]
+        yield "final", final
+        return
+
     streamed_prefix = ""
     if plan.meta.get("warm_opening"):
         streamed_prefix = plan.meta["warm_opening"].strip() + "\n\n"
@@ -828,7 +885,7 @@ async def stream_plan(
         async for delta in paced(
             stream_generate(
                 providers, llm_messages, temperature=0.85,
-                max_tokens=500 if plan.meta.get("v2") else 1200,
+                max_tokens=800 if plan.meta.get("v2") else 1200,
             ),
             **pace_kwargs,
         ):
