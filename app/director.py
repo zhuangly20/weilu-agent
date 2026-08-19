@@ -157,6 +157,44 @@ async def _generate_v2_opening_handoff(
     )
 
 
+def _v2_advance_ok(text: str, plan: "TurnPlan") -> bool:
+    """A state transition is valid only when users can see the new activity begin."""
+    if not (plan.meta.get("v2") and plan.meta.get("action") == "advance"):
+        return True
+    label = str(plan.meta.get("stage_label") or "")
+    speakers = re.findall(r"^【([^】]+)】", text, re.MULTILINE)
+    if label not in text or prompts.LEADER_NAME not in speakers:
+        return False
+    last_leader = len(speakers) - 1 - speakers[::-1].index(prompts.LEADER_NAME)
+    return any(s in plan.meta.get("team", []) for s in speakers[last_leader + 1:])
+
+
+async def _generate_v2_advance(
+    plan: "TurnPlan", providers: list[ProviderConfig], messages: list[dict[str, str]],
+) -> str:
+    """Generate and verify facilitator summary → activity announcement → peer demo."""
+    last = ""
+    for attempt in range(2):
+        current = messages
+        if attempt:
+            current = [messages[0], {"role": "user", "content": messages[1]["content"] + (
+                f"\n\n上一次转场结构不完整，请重写：小晴先总结上一活动，再明确说出新活动“{plan.meta.get('stage_label')}”"
+                "的任务和可跳过边界，最后必须有一位团友示范。"
+            )}]
+        last = await generate(providers, current, temperature=0.7, max_tokens=800)
+        if (_v2_advance_ok(last, plan)
+                and not prompts.forbidden_word_issues(last)):
+            return last
+    cfg = load_group_v2_config()
+    phase = cfg["phases"][int(plan.meta.get("round") or 1) - 1]
+    peer = (plan.meta.get("team") or ["团友"])[0]
+    return (
+        "【小晴】我先把刚才收在这里：大家已经说出了一些真实处境，也听见了彼此不同的部分。"
+        f"\n【小晴】接下来进入“{phase['label']}”。{phase['activity']}你可以参与，也可以跳过或先听。"
+        f"\n【{peer}】我先来做个示范，再听听其他人怎么接。"
+    )
+
+
 def _safe_report_fallback() -> str:
     """供应商异常或违反公开文案边界时使用的安全报告回退。"""
     return "\n".join([
@@ -756,6 +794,9 @@ async def execute_plan(
             and plan.meta.get("action") == "discuss"):
         text = await _generate_v2_opening_handoff(plan, providers, llm_messages)
         return _finalize_body(plan, text.strip()), [], []
+    if plan.meta.get("v2") and plan.meta.get("action") == "advance":
+        text = await _generate_v2_advance(plan, providers, llm_messages)
+        return _finalize_body(plan, text.strip()), [], []
     turn_tokens = 800 if plan.meta.get("v2") else 1200
     text = await generate(providers, llm_messages, temperature=0.85, max_tokens=turn_tokens)
     issues = prompts.validate_turn(text, allowed, min_members)
@@ -860,6 +901,16 @@ async def stream_plan(
         yield "final", final
         return
 
+    if plan.meta.get("v2") and plan.meta.get("action") == "advance":
+        display = (await _generate_v2_advance(plan, providers, llm_messages)).strip()
+        async for delta in paced_text(display):
+            yield "delta", delta
+        final = _finalize_body(plan, display)
+        if len(final) > len(display):
+            yield "delta", final[len(display):]
+        yield "final", final
+        return
+
     if (plan.meta.get("v2") and plan.meta.get("round") == 1
             and plan.meta.get("action") == "discuss"):
         display = (await _generate_v2_opening_handoff(plan, providers, llm_messages)).strip()
@@ -882,12 +933,9 @@ async def stream_plan(
         pace_kwargs = {"char_ms": 55.0, "pause_ms": 4200.0}
     collected: list[str] = []
     try:
-        async for delta in paced(
-            stream_generate(
-                providers, llm_messages, temperature=0.85,
-                max_tokens=800 if plan.meta.get("v2") else 1200,
-            ),
-            **pace_kwargs,
+        async for delta in stream_generate(
+            providers, llm_messages, temperature=0.85,
+            max_tokens=800 if plan.meta.get("v2") else 1200,
         ):
             collected.append(delta)
     except Exception:
@@ -900,6 +948,13 @@ async def stream_plan(
             return
     body = "".join(collected).strip()
     issues = prompts.forbidden_word_issues(body)
+    if issues and plan.meta.get("v2"):
+        try:
+            retry = await generate(providers, llm_messages, temperature=0.65, max_tokens=800)
+            if not prompts.forbidden_word_issues(retry):
+                body, issues = retry.strip(), []
+        except Exception:
+            pass
     if issues:
         body = prompts.LLM_FALLBACK_TEXT
     visible = streamed_prefix + body

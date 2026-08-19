@@ -929,6 +929,25 @@ def test_v2_opening_handoff_validator_rejects_stranded_user():
     assert director._v2_opening_handoff_ok(handed, plan) is True
 
 
+def test_v2_advance_validator_requires_visible_activity_and_peer_demo():
+    state = group_v2.GroupState(
+        phase=1, mode="main", exchanges=1,
+        team_ids=["linzhiheng", "xunanzhi", "chenmo"],
+        card_ids=["help_message", "extra_work", "failed_again"],
+    )
+    messages = [
+        {"role": "user", "content": "我想参加减压安心之旅"},
+        {"role": "assistant", "content": "【小晴】开场。\n" + group_v2.marker(state)},
+        {"role": "user", "content": "没有"},
+    ]
+    plan = director.plan_turn(messages)
+    assert plan.meta["action"] == "advance" and plan.meta["stage_label"] == "身体天气与压力温度"
+    missing = "【小晴】我们把刚才收在这里。\n【林之衡】我也有压力。"
+    complete = "【小晴】我们把刚才收在这里。\n【小晴】接下来是身体天气与压力温度，说一个身体感受。\n【林之衡】我先来，我的肩膀有点紧。"
+    assert director._v2_advance_ok(missing, plan) is False
+    assert director._v2_advance_ok(complete, plan) is True
+
+
 def test_v2_phase8_next_closes_and_requests_html():
     state = group_v2.GroupState(
         phase=8, mode="main", exchanges=1,
