@@ -884,7 +884,7 @@ def test_stress_v2_only_explicit_advance_changes_phase():
 
 def test_v2_facilitator_advances_after_activity_budget():
     state = group_v2.GroupState(
-        phase=2, mode="main", exchanges=2,
+        phase=2, mode="main", exchanges=1,
         team_ids=["linzhiheng", "xunanzhi", "chenmo"],
         card_ids=["help_message", "extra_work", "failed_again"],
     )
@@ -950,6 +950,23 @@ def test_v2_advance_validator_requires_visible_activity_and_peer_demo():
     complete = "【小晴】我们把刚才收在这里。\n【小晴】接下来是身体天气与压力温度，说一个身体感受。\n【林之衡】我先来，我的肩膀有点紧。"
     assert director._v2_advance_ok(missing, plan) is False
     assert director._v2_advance_ok(complete, plan) is True
+
+
+def test_v2_facilitator_cues_user_when_peer_discussion_forgets():
+    state = group_v2.GroupState(
+        phase=2, mode="main", exchanges=0,
+        team_ids=["linzhiheng", "xunanzhi", "chenmo"],
+        card_ids=["help_message", "extra_work", "failed_again"],
+    )
+    plan = director._v2_plan([], "胸口很紧", state, None)
+    stranded = "【林之衡】我也会胸口紧。\n【许南枝】我有时在食堂排队会突然想到任务。\n【陈默】身体常常比想法先知道。"
+    fixed = director._ensure_v2_participant_cue(stranded, plan)
+    assert fixed.startswith(stranded)
+    assert "【小晴】我先停一下" in fixed
+    assert "你想回应一下陈默吗" in fixed and "继续听" in fixed
+
+    already_cued = stranded + "\n【陈默】你想从哪个时刻说起？"
+    assert director._ensure_v2_participant_cue(already_cued, plan) == already_cued
 
 
 def test_v2_phase8_next_closes_and_requests_html():

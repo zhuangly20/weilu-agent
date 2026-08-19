@@ -169,6 +169,24 @@ def _v2_advance_ok(text: str, plan: "TurnPlan") -> bool:
     return any(s in plan.meta.get("team", []) for s in speakers[last_leader + 1:])
 
 
+def _ensure_v2_participant_cue(text: str, plan: "TurnPlan") -> str:
+    """If peers forget to hand back the floor, the facilitator does it once."""
+    if not (plan.meta.get("v2") and plan.meta.get("action") == "discuss"):
+        return text
+    matches = list(re.finditer(r"^【([^】]+)】", text, re.MULTILINE))
+    if not matches:
+        return text
+    final_block = text[matches[-1].end():]
+    if "？" in final_block or "?" in final_block or "继续听" in final_block:
+        return text
+    team = set(plan.meta.get("team") or [])
+    peer = next((m.group(1) for m in reversed(matches) if m.group(1) in team), "团友")
+    return text.rstrip() + (
+        f"\n【小晴】我先停一下。刚才{peer}说的这部分，你想回应一下{peer}吗？"
+        "也可以说“继续听”，我让大家接着聊。"
+    )
+
+
 async def _generate_v2_advance(
     plan: "TurnPlan", providers: list[ProviderConfig], messages: list[dict[str, str]],
 ) -> str:
@@ -793,7 +811,8 @@ async def execute_plan(
     if (plan.meta.get("v2") and plan.meta.get("round") == 1
             and plan.meta.get("action") == "discuss"):
         text = await _generate_v2_opening_handoff(plan, providers, llm_messages)
-        return _finalize_body(plan, text.strip()), [], []
+        text = _ensure_v2_participant_cue(text.strip(), plan)
+        return _finalize_body(plan, text), [], []
     if plan.meta.get("v2") and plan.meta.get("action") == "advance":
         text = await _generate_v2_advance(plan, providers, llm_messages)
         return _finalize_body(plan, text.strip()), [], []
@@ -806,6 +825,7 @@ async def execute_plan(
         if len(retry_issues) < len(issues):
             text, issues = retry, retry_issues
     body = text.strip()
+    body = _ensure_v2_participant_cue(body, plan)
     attachments: list[dict] = []
     if img_task is not None:
         img = await img_task
@@ -914,6 +934,7 @@ async def stream_plan(
     if (plan.meta.get("v2") and plan.meta.get("round") == 1
             and plan.meta.get("action") == "discuss"):
         display = (await _generate_v2_opening_handoff(plan, providers, llm_messages)).strip()
+        display = _ensure_v2_participant_cue(display, plan)
         async for delta in paced_text(display):
             yield "delta", delta
         final = _finalize_body(plan, display)
@@ -957,6 +978,7 @@ async def stream_plan(
             pass
     if issues:
         body = prompts.LLM_FALLBACK_TEXT
+    body = _ensure_v2_participant_cue(body, plan)
     visible = streamed_prefix + body
     async for delta in paced_text(visible):
         yield "delta", delta
