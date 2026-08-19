@@ -27,6 +27,8 @@ def _env_float(name: str, default: float) -> float:
 
 
 def pacing_enabled() -> bool:
+    # Smooth providers that occasionally batch a whole answer into one SSE delta.
+    # Defaults are deliberately light; the old 28ms/1200ms values felt unresponsive.
     return os.environ.get("WEILU_PACING", "true").strip().lower() != "false"
 
 
@@ -43,9 +45,9 @@ async def paced(
         return
 
     if char_ms is None:
-        char_ms = _env_float("WEILU_SCRIPT_PACE_CHAR_MS", 12.0) if scripted else _env_float("WEILU_PACE_CHAR_MS", 28.0)
+        char_ms = _env_float("WEILU_SCRIPT_PACE_CHAR_MS", 2.0) if scripted else _env_float("WEILU_PACE_CHAR_MS", 6.0)
     if pause_ms is None:
-        pause_ms = _env_float("WEILU_SCRIPT_PACE_PAUSE_MS", 500.0) if scripted else _env_float("WEILU_PACE_PAUSE_MS", 1200.0)
+        pause_ms = _env_float("WEILU_SCRIPT_PACE_PAUSE_MS", 80.0) if scripted else _env_float("WEILU_PACE_PAUSE_MS", 180.0)
 
     acc = ""                 # 已接收文本
     i = 0                    # 已释放位置

@@ -471,7 +471,7 @@ def _v2_plan(
     user_content = group_v2.build_user_content(messages, last_user)
     if extra:
         user_content += "\n\n【安全优先提示】\n" + extra
-    return TurnPlan(
+    plan = TurnPlan(
         kind="generate", system_prompt=system_prompt, user_content=user_content,
         marker=group_v2.marker(state),
         meta={
@@ -481,6 +481,14 @@ def _v2_plan(
             "action": action, "report_v2": action == "close_report", "crisis": crisis,
         },
     )
+    if initial_open:
+        # The opening is stable product copy, not a generation task. This makes it
+        # instant and guarantees peers are introduced before taking part.
+        plan.kind = "scripted"
+        plan.script = _finalize_body(plan, group_v2.opening_script(state))
+        # Keep marker metadata available to tests/callers; the scripted executor
+        # returns plan.script directly, so it is not appended a second time.
+    return plan
 
 
 def _interaction_note(last_user: str, team: list[dict], at_seat: bool = False) -> str:
@@ -703,10 +711,11 @@ async def execute_plan(
         body = text.strip()
         attachments = build_attachments(plan, body)
         return _finalize_body(plan, body), [], attachments
-    text = await generate(providers, llm_messages, temperature=0.85, max_tokens=1200)
+    turn_tokens = 500 if plan.meta.get("v2") else 1200
+    text = await generate(providers, llm_messages, temperature=0.85, max_tokens=turn_tokens)
     issues = prompts.validate_turn(text, allowed, min_members)
     if issues and plan.meta.get("stage") != "report":
-        retry = await generate(providers, llm_messages, temperature=0.7, max_tokens=1200)
+        retry = await generate(providers, llm_messages, temperature=0.7, max_tokens=turn_tokens)
         retry_issues = prompts.validate_turn(retry, allowed, min_members)
         if len(retry_issues) < len(issues):
             text, issues = retry, retry_issues
@@ -818,7 +827,10 @@ async def stream_plan(
     collected: list[str] = []
     try:
         async for delta in paced(
-            stream_generate(providers, llm_messages, temperature=0.85, max_tokens=1200),
+            stream_generate(
+                providers, llm_messages, temperature=0.85,
+                max_tokens=500 if plan.meta.get("v2") else 1200,
+            ),
             **pace_kwargs,
         ):
             collected.append(delta)

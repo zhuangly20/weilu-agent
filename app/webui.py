@@ -128,7 +128,8 @@ try { messages = JSON.parse(localStorage.getItem('weilu_msgs') || '[]'); } catch
 function persist(){ localStorage.setItem('weilu_msgs', JSON.stringify(messages)); }
 
 function copyChat(){
-  const text = messages.map(m => m.role === 'user' ? '【我】' + m.content : m.content).join('\\n\\n');
+  const clean = s => s.replace(/<!--QXG2\\|[\\s\\S]*?-->/g, '').trim();
+  const text = messages.map(m => m.role === 'user' ? '【我】' + m.content : clean(m.content)).join('\\n\\n');
   const done = () => { const b = document.getElementById('copyBtn'); b.textContent = '✅ 已复制';
                        setTimeout(() => b.textContent = '📋 复制对话', 1500); };
   if (navigator.clipboard && navigator.clipboard.writeText){
@@ -188,11 +189,12 @@ function renderRound(acc, box){
   box.innerHTML = '';
   let textEl = null;
   for (const ln of acc.split('\\n')){
+    if (ln.trim().startsWith('<!--QXG2|')) continue;
     const m = ln.match(/^【([^】]+)】(.*)$/);
     if (m){
       textEl = makeBubble(m[1].trim(), box);
       textEl.textContent = m[2];
-    } else if (ln.trim().startsWith('（圆桌进度')){
+    } else if (ln.trim().startsWith('（圆桌进度') || ln.trim().startsWith('📍 当前活动')){
       const d = document.createElement('div');
       d.style.cssText = 'color:var(--dim);font-size:12px;text-align:center;margin:16px 0 4px';
       d.textContent = ln.trim();
@@ -207,6 +209,13 @@ function renderRound(acc, box){
   }
   window.scrollTo(0, document.body.scrollHeight);
 }
+
+input.addEventListener('keydown', ev => {
+  if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
+    ev.preventDefault();
+    send(ev);
+  }
+});
 
 function addAttachments(atts){
   for (const a of atts){

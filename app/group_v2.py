@@ -83,6 +83,21 @@ def member_names(state: GroupState) -> list[str]:
     return [cfg["members"][mid]["name"] for mid in state.team_ids]
 
 
+def opening_script(state: GroupState) -> str:
+    """Fixed, instant opening: disclose boundaries and introduce every peer first."""
+    cfg = load_group_v2_config()
+    lines = [
+        "【小晴】欢迎来到减压安心之旅。我是带领者小晴。这里是结构式AI同伴活动，不是心理咨询或治疗；你可以随时旁听、跳过、点名、打断或结束。",
+        "【小晴】今天同桌的三位团友都是虚构AI角色。先让他们正式介绍自己，再由你决定怎么参与。",
+    ]
+    for mid, card_id in zip(state.team_ids, state.card_ids):
+        member = cfg["members"][mid]
+        situation = member["situations"][card_id]
+        lines.append(f"【{member['name']}】我是{member['name']}。{situation}")
+    lines.append("【小晴】今天你更想被听见、一起理清、听听不同视角，还是先旁听？回复一个选项就可以。")
+    return "\n".join(lines)
+
+
 def detect_focus(text: str, state: GroupState) -> str:
     cfg = load_group_v2_config()
     for mid in state.team_ids:

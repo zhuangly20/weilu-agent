@@ -13,9 +13,7 @@ DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=90.0, write=10.0, pool=5.0)
 
 
 def _effective_max_tokens(provider: ProviderConfig, max_tokens: int) -> int:
-    """DeepSeek V4 的推理内容也占用 token 预算，给它留出足够空间。"""
-    if provider.model.startswith("deepseek-v4"):
-        return max(max_tokens, 8000)
+    """Respect the caller's compact output budget to keep group turns responsive."""
     return max_tokens
 
 
@@ -42,6 +40,10 @@ async def _stream_from_provider(
         "temperature": temperature,
         "max_tokens": _effective_max_tokens(provider, max_tokens),
     }
+    # V4 defaults to thinking mode. Real-time group dialogue needs a short
+    # time-to-first-token, so use the official non-thinking switch.
+    if provider.base_url.rstrip("/") == "https://api.deepseek.com" and provider.model.startswith("deepseek-v4"):
+        payload["thinking"] = {"type": "disabled"}
     headers = {"Authorization": f"Bearer {provider.api_key}"}
     try:
         async with client.stream(

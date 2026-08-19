@@ -494,7 +494,8 @@ async def test_stream_hides_legacy_generated_imagery(monkeypatch):
     visible = "".join(payload for kind, payload in events if kind == "delta")
     final = next(payload for kind, payload in events if kind == "final")
     assert "围炉" not in visible and "围炉" not in final
-    assert prompts.LLM_FALLBACK_TEXT in final
+    assert "欢迎来到减压安心之旅" in final
+    assert "虚构AI角色" in final
 
 
 @pytest.mark.asyncio
@@ -712,7 +713,9 @@ def test_pacer_preserves_content():
 
 def test_pacer_pauses_between_speakers():
     text = "【A】第一句。\n\n【B】第二句。\n"
-    out, timings = _run_paced([text], WEILU_PACE_CHAR_MS="1", WEILU_PACE_PAUSE_MS="200")
+    out, timings = _run_paced(
+        [text], WEILU_PACING="true", WEILU_PACE_CHAR_MS="1", WEILU_PACE_PAUSE_MS="200"
+    )
     assert out == text
     t_b = timings[out.index("【B】")]
     t_a = timings[out.index("【A】")]
