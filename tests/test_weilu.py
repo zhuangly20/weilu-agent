@@ -902,16 +902,18 @@ def test_v2_observer_mode_runs_peer_discussion_without_leader_prompting():
     assert "4—6次有来有回" in prompt and "小晴除非需要控场，否则完全不出现" in prompt
 
 
-def test_v2_opening_hands_turn_back_with_concrete_cue():
+def test_v2_opening_hands_turn_to_peer_not_leader_interview():
     state = group_v2.GroupState(
         phase=1, mode="main", exchanges=1,
         team_ids=["linzhiheng", "xunanzhi", "chenmo"],
         card_ids=["help_message", "extra_work", "failed_again"],
     )
     prompt = group_v2.build_system_prompt(state, "discuss")
-    assert "小晴必须在最后回来一次" in prompt
-    assert "挑出今天最占位置的一块压力" in prompt
-    assert "不要笼统地问‘想聊什么’" in prompt
+    assert "对用户做一对一访谈" in prompt
+    assert "最后一句必须来自团友" in prompt
+    assert "让用户是在回应同伴而不是回应主持人" in prompt
+    assert "整轮只能有一位团友向用户提出一个问题" in prompt
+    assert "不能预告‘我会回来问你’" in prompt
 
 
 def test_v2_phase8_next_closes_and_requests_html():
