@@ -844,7 +844,10 @@ def test_stress_v2_contract_and_three_consistent_peers():
     assert plan.meta["stage"] == "v2_contract" and plan.meta["theme"] == "academic"
     assert plan.meta["v2"] is True and len(plan.meta["team"]) == 3
     assert "虚构AI" in plan.system_prompt and "不是心理咨询或治疗" in plan.system_prompt
-    assert "被听见" in plan.system_prompt and "一次只处理一个主要互动任务" in plan.system_prompt
+    assert "不要询问用户想选择哪种参与方式" in plan.system_prompt
+    assert "一次只处理一个主要互动任务" in plan.system_prompt
+    assert plan.script.index("我们的第一个活动") < plan.script.index("【林之衡】")
+    assert "回复一个选项" not in plan.script
     state = group_v2.reconstruct([{"role": "assistant", "content": plan.marker}])
     assert state is not None and state.phase == 1 and len(state.team_ids) == 3
 

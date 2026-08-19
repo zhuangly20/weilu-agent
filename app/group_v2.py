@@ -86,17 +86,17 @@ def member_names(state: GroupState) -> list[str]:
 
 
 def opening_script(state: GroupState) -> str:
-    """Fixed, instant opening: disclose boundaries and introduce every peer first."""
+    """Fixed opening: leader announces the activity before members begin it."""
     cfg = load_group_v2_config()
     lines = [
         "【小晴】欢迎来到减压安心之旅。我是带领者小晴。这里是结构式AI同伴活动，不是心理咨询或治疗；你可以随时旁听、跳过、点名、打断或结束。",
-        "【小晴】今天同桌的三位团友都是虚构AI角色。先让他们正式介绍自己，再由你决定怎么参与。",
+        "【小晴】今天同桌的三位团友都是虚构AI角色。我们的第一个活动是“为什么来到这张桌子”：每个人简单介绍自己的年级和专业，再说一件最近带来的压力。大家先听和好奇，不急着给办法。我请三位团友先开始。",
     ]
     for mid, card_id in zip(state.team_ids, state.card_ids):
         member = cfg["members"][mid]
         situation = member["situations"][card_id]
         lines.append(f"【{member['name']}】我是{member['name']}，{member['profile']}{situation}")
-    lines.append("【小晴】今天你更想被听见、一起理清、听听不同视角，还是先旁听？回复一个选项就可以。")
+    lines.append("【小晴】第一轮先从这里聊开。你可以接住任何一句、说说自己为什么来，也可以先听；不需要先选一种参与方式。")
     return "\n".join(lines)
 
 
@@ -157,13 +157,14 @@ def build_system_prompt(state: GroupState, action: str) -> str:
     action_text = {
         "open": (
             "这是第一阶段首次开启。小晴先透明披露所有团友均为虚构AI角色和非医疗边界，"
-            "说明用户可打断、跳过、点名或结束；询问更需要被听见、一起理清、不同视角还是先旁听。"
-            "三位团友各用一句话说今天为何来，不讲完整履历。"
+            "说明用户可打断、跳过、点名或结束；不要询问用户想选择哪种参与方式。"
+            "小晴先宣布本环节活动、目的和玩法，再让三位团友介绍身份并说今天为何来。"
         ),
         "advance": (
             "这是带领者按活动时间主动转场，不是用户必须负责推进。先接住用户刚说的内容，"
             "再由小晴用2句总结上一个活动的共同点、差异或相互影响；"
-            f"随后自然开启“{phase['label']}”，简要说明玩法。由一位团友先示范并引出成员讨论，"
+            f"随后明确宣布新活动“{phase['label']}”要讨论或完成什么、怎么参与和可以跳过。"
+            "必须先宣布活动，再由一位团友示范并引出成员讨论，"
             "不要把新活动的启动责任又交回用户。"
         ),
         "discuss": (
@@ -198,6 +199,7 @@ def build_system_prompt(state: GroupState, action: str) -> str:
 {action_text}
 
 【带领边界】
+- 每个新活动都遵循固定次序：小晴总结上一活动 → 宣布新活动主题、任务和边界 → 团友示范 → 自由讨论。不得让团友在活动说明之前自行开聊。
 - 小晴只在攻击指责、抢话、持续未经同意的建议、参与失衡、明显不适、严重偏题或安全风险时控场。
 - 对行为和影响说话，不给任何人贴人格标签；成员可以不同意小晴。
 - 用户点名谁，谁优先正面回应；只有本轮动作明确为advance时才转场。
