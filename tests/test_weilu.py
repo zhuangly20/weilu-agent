@@ -848,7 +848,9 @@ def test_stress_v2_contract_and_three_consistent_peers():
     assert "一次只处理一个主要互动任务" in plan.system_prompt
     assert plan.script.index("我们的第一个活动") < plan.script.index("【林之衡】")
     assert "回复一个选项" not in plan.script
-    assert "希望大家怎么称呼你" in plan.script and "名字加学姐/学长" in plan.script
+    assert "告诉大家希望怎么称呼你" in plan.script and "名字加学姐/学长" in plan.script
+    assert "现在轮到你做自我介绍" in plan.script
+    assert "正式的位置" not in plan.script and "我先听一轮" not in plan.script
     state = group_v2.reconstruct([{"role": "assistant", "content": plan.marker}])
     assert state is not None and state.phase == 1 and len(state.team_ids) == 3
 

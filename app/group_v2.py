@@ -97,9 +97,9 @@ def opening_script(state: GroupState) -> str:
         situation = member["situations"][card_id]
         lines.append(f"【{member['name']}】我是{member['name']}，{member['profile']}{situation}")
     lines.append(
-        "【小晴】三位团友介绍完了，现在也给你一个正式的位置。请按你愿意的程度介绍一下："
-        "希望大家怎么称呼你（例如直接叫名字，或名字加学姐/学长）、年级或专业，以及今天为什么来到这里。"
-        "可以只说其中一项，也可以说“我先听一轮”。"
+        "【小晴】三位团友介绍完了，现在轮到你做自我介绍。请告诉大家希望怎么称呼你"
+        "（例如直接叫名字，或名字加学姐/学长）、目前的年级或学习阶段，以及今天为什么来到这里。"
+        "不方便透露的具体信息可以概括地说。"
     )
     return "\n".join(lines)
 
