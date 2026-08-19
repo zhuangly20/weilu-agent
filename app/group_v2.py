@@ -96,7 +96,10 @@ def opening_script(state: GroupState) -> str:
         member = cfg["members"][mid]
         situation = member["situations"][card_id]
         lines.append(f"【{member['name']}】我是{member['name']}，{member['profile']}{situation}")
-    lines.append("【小晴】第一轮先从这里聊开。你可以接住任何一句、说说自己为什么来，也可以先听；不需要先选一种参与方式。")
+    lines.append(
+        "【小晴】三位团友介绍完了，现在也给你一个正式的位置。请按你愿意的程度介绍一下："
+        "希望大家怎么称呼你、年级或专业，以及今天为什么来到这里。可以只说其中一项，也可以说“我先听一轮”。"
+    )
     return "\n".join(lines)
 
 

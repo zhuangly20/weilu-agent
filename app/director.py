@@ -80,8 +80,7 @@ def _finalize_body(plan: "TurnPlan", body: str) -> str:
     if plan.marker:
         parts.append(plan.marker)
         if plan.meta.get("v2"):
-            parts.append(f"📍 当前活动：{plan.meta.get('stage_label') or '团体讨论'}"
-                         "｜可以旁听、加入讨论或点名团友；小晴会把握节奏和转场")
+            parts.append(f"📍 {plan.meta.get('stage_label') or '团体讨论'} · 小晴会带领转场")
         else:
             parts.append(progress_line(int(plan.meta.get("round") or 1),
                                        str(plan.meta.get("stage_label") or "环节")))

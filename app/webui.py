@@ -79,9 +79,6 @@ PAGE = """<!DOCTYPE html>
          padding:0 24px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(240,96,60,.25);}
   button:disabled{opacity:.5;cursor:default;box-shadow:none;}
   .hint{max-width:780px;margin:0 auto 6px;font-size:12px;color:var(--dim);}
-  .hint button{background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:12px;
-               padding:5px 10px;margin:0 6px 5px 0;font-size:12px;font-weight:600;box-shadow:none;}
-  .hint button:hover{border-color:var(--accent);color:var(--accent-deep);}
 </style>
 </head>
 <body>
@@ -115,8 +112,7 @@ PAGE = """<!DOCTYPE html>
   </div>
 </main>
 <form onsubmit="return send(event)">
-  <div class="hint"><button type="button" onclick="quickSend('继续听大家聊')">🎧 继续旁听</button><button type="button" onclick="quickSend('我想说一点')">💬 加入讨论</button><button type="button" onclick="quickSend('请小晴带下一个活动')">⏭ 请小晴带流程</button></div>
-  <div class="hint">不知道说什么时可以直接点上面的选项 · Enter 发送 · Shift+Enter 换行</div>
+  <div class="hint">不知道说什么时，可以直接说“我先听一轮” · Enter 发送 · Shift+Enter 换行</div>
   <inner><textarea id="input" placeholder="说点什么……" autofocus></textarea><button id="btn">发送</button></inner>
 </form>
 <script>
@@ -198,7 +194,7 @@ function renderRound(acc, box){
     if (m){
       textEl = makeBubble(m[1].trim(), box);
       textEl.textContent = m[2];
-    } else if (ln.trim().startsWith('（圆桌进度') || ln.trim().startsWith('📍 当前活动')){
+    } else if (ln.trim().startsWith('（圆桌进度') || ln.trim().startsWith('📍')){
       const d = document.createElement('div');
       d.style.cssText = 'color:var(--dim);font-size:12px;text-align:center;margin:16px 0 4px';
       d.textContent = ln.trim();
