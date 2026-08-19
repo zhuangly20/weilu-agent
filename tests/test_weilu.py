@@ -876,6 +876,73 @@ def test_stress_v2_only_explicit_advance_changes_phase():
     assert advance_state is not None and advance_state.phase == 2
 
 
+def test_v2_facilitator_advances_after_activity_budget():
+    state = group_v2.GroupState(
+        phase=2, mode="main", exchanges=2,
+        team_ids=["linzhiheng", "xunanzhi", "chenmo"],
+        card_ids=["help_message", "extra_work", "failed_again"],
+    )
+    advanced, action = group_v2.next_state("我感觉肩膀有点紧", state)
+    assert action == "advance" and advanced.phase == 3 and advanced.exchanges == 0
+
+
+def test_v2_observer_mode_runs_peer_discussion_without_leader_prompting():
+    state = group_v2.GroupState(
+        phase=2, mode="main", exchanges=0,
+        team_ids=["linzhiheng", "xunanzhi", "chenmo"],
+        card_ids=["help_message", "extra_work", "failed_again"],
+    )
+    observed, action = group_v2.next_state("你们自己聊，我先旁听", state)
+    prompt = group_v2.build_system_prompt(observed, action)
+    assert action == "observe" and observed.phase == 2
+    assert "4—6次有来有回" in prompt and "小晴除非需要控场，否则完全不出现" in prompt
+
+
+def test_v2_phase8_next_closes_and_requests_html():
+    state = group_v2.GroupState(
+        phase=8, mode="main", exchanges=1,
+        team_ids=["linzhiheng", "xunanzhi", "chenmo"],
+        card_ids=["help_message", "extra_work", "failed_again"],
+    )
+    closed, action = group_v2.next_state("下一项", state)
+    assert action == "close_report" and closed.mode == "report"
+
+
+@pytest.mark.asyncio
+async def test_v2_phase8_stream_returns_roundtable_html(monkeypatch):
+    state = group_v2.GroupState(
+        phase=8, mode="main", exchanges=1,
+        team_ids=["linzhiheng", "xunanzhi", "chenmo"],
+        card_ids=["help_message", "extra_work", "failed_again"],
+    )
+    messages = [
+        {"role": "user", "content": "我想参加减压安心之旅"},
+        {"role": "assistant", "content": "【小晴】到了告别环节。\n" + group_v2.marker(state)},
+        {"role": "user", "content": "下一项"},
+    ]
+    plan = director.plan_turn(messages)
+    assert plan.meta.get("report_v2") is True
+
+    async def fake_generate(providers, llm_messages, **kwargs):
+        return '{"approach_moment":"一起聊到不敢开口","user_impact":"一句熟能生巧影响了之衡","member_impact":"未确认","differences":["先休息","先做一点"],"response_need":"未明确","real_world_phrase":"先做一点","pressure_before":9,"pressure_after":8,"leader_note":"谢谢你和大家坐到最后。"}'
+
+    monkeypatch.setattr("app.director.generate", fake_generate)
+    events = [event async for event in director.stream_plan(plan, [])]
+    attachments = next(payload for kind, payload in events if kind == "attachments")
+    assert attachments[0]["fileName"].endswith("圆桌留笺.html")
+
+
+def test_v2_opening_gives_year_major_and_everyday_identity():
+    state = group_v2.GroupState(
+        phase=1, team_ids=["linzhiheng", "xunanzhi", "chenmo"],
+        card_ids=["help_message", "extra_work", "failed_again"],
+    )
+    opening = group_v2.opening_script(state)
+    assert "研一，生命学院生物信息方向" in opening
+    assert "大三，公共管理专业" in opening
+    assert "博三，材料学院能源材料方向" in opening
+
+
 def test_v2_roundtable_note_is_visual_and_safe():
     from app import report_v2_html
 

@@ -17,6 +17,8 @@ NEXT_RE = re.compile(r"进入下一|下一(个|项|阶段)|继续流程|往下|�
 END_RE = re.compile(r"结束|离桌|生成.*留笺|看看.*留笺|今天先到|就到这里")
 STAY_RE = re.compile(r"继续聊|再聊|还想|还没说完|先别推进|停在这里")
 FEEDBACK_RE = re.compile(r"不舒服|不喜欢|别.*建议|不要.*建议|问得太快|没听懂|你误会|不是这个意思|让我说完")
+OBSERVE_RE = re.compile(r"旁听|你们.*聊|大家.*聊|不想说|不知道说什么|没什么想说|先听|继续听|^嗯+|^好(的)?$")
+PHASE_TURN_BUDGETS = {1: 2, 2: 3, 3: 3, 4: 3, 5: 2, 6: 3, 7: 2, 8: 2}
 
 
 @dataclass
@@ -93,7 +95,7 @@ def opening_script(state: GroupState) -> str:
     for mid, card_id in zip(state.team_ids, state.card_ids):
         member = cfg["members"][mid]
         situation = member["situations"][card_id]
-        lines.append(f"【{member['name']}】我是{member['name']}。{situation}")
+        lines.append(f"【{member['name']}】我是{member['name']}，{member['profile']}{situation}")
     lines.append("【小晴】今天你更想被听见、一起理清、听听不同视角，还是先旁听？回复一个选项就可以。")
     return "\n".join(lines)
 
@@ -115,14 +117,21 @@ def next_state(last_user: str, current: GroupState) -> tuple[GroupState, str]:
     if focus or STAY_RE.search(last_user):
         return GroupState(current.phase, "focus", focus or current.focus,
                           current.exchanges + 1, current.team_ids, current.card_ids), "discuss"
-    if current.phase == 8 and END_RE.search(last_user):
+    if current.phase == 8 and (END_RE.search(last_user) or NEXT_RE.search(last_user)):
         return GroupState(8, "report", "", current.exchanges,
                           current.team_ids, current.card_ids), "close_report"
     if NEXT_RE.search(last_user) or (current.mode == "await_next" and re.search(r"好|可以|嗯|准确", last_user)):
         phase = min(8, current.phase + 1)
         return GroupState(phase, "main", "", 0, current.team_ids, current.card_ids), "advance"
-    return GroupState(current.phase, "main", current.focus,
-                      current.exchanges + 1, current.team_ids, current.card_ids), "discuss"
+    if current.exchanges + 1 >= PHASE_TURN_BUDGETS[current.phase]:
+        if current.phase == 8:
+            return GroupState(8, "report", "", current.exchanges + 1,
+                              current.team_ids, current.card_ids), "close_report"
+        return GroupState(current.phase + 1, "main", "", 0,
+                          current.team_ids, current.card_ids), "advance"
+    action = "observe" if OBSERVE_RE.search(last_user) else "discuss"
+    return GroupState(current.phase, action, current.focus,
+                      current.exchanges + 1, current.team_ids, current.card_ids), action
 
 
 def _member_block(mid: str, card_id: str) -> str:
@@ -131,6 +140,7 @@ def _member_block(mid: str, card_id: str) -> str:
     event = m["situations"][card_id]
     return (
         f"【{m['name']}｜虚构AI团友】\n"
+        f"身份：{m['profile']}\n日常：{m['everyday']}\n"
         f"固定内核：{m['core']}\n关系倾向：{m['relational']}\n"
         f"独立需要：{m['need']}\n表达：{m['voice']}\n本场情境：{event}"
     )
@@ -151,13 +161,20 @@ def build_system_prompt(state: GroupState, action: str) -> str:
             "三位团友各用一句话说今天为何来，不讲完整履历。"
         ),
         "advance": (
-            "先由小晴用2—3句总结上一个阶段谈到的共同点、差异和相互影响，并说明总结可被校正；"
-            f"随后自然开启新活动“{phase['label']}”，解释目的和可拒绝权，只提出一个主要邀请。"
+            "这是带领者按活动时间主动转场，不是用户必须负责推进。先接住用户刚说的内容，"
+            "再由小晴用2句总结上一个活动的共同点、差异或相互影响；"
+            f"随后自然开启“{phase['label']}”，简要说明玩法。由一位团友先示范并引出成员讨论，"
+            "不要把新活动的启动责任又交回用户。"
         ),
         "discuss": (
             f"留在当前活动“{phase['label']}”自由讨论。优先回应用户最后一句，不重复活动说明。"
-            "最多两位团友发言；允许团友直接回应彼此。若本阶段目标已经明显发生，"
-            "小晴在结尾简短收起并询问用户想继续停留、请人收桌还是进入下一项；否则不催推进。"
+            "本轮小晴通常不出现。让2—3位团友直接接彼此的话，每人推进自己的经历或分歧。"
+            "不要轮流评价用户，也不要把每个话题折回用户；结尾可以停在团友的话上，不必提问。"
+        ),
+        "observe": (
+            f"用户选择旁听。围绕当前活动“{phase['label']}”，让三位团友自主聊出4—6次有来有回的短发言。"
+            "他们要追问彼此、补充具体校园生活细节、出现轻微分歧或笑点；不向用户提问，不总结用户。"
+            "小晴除非需要控场，否则完全不出现。"
         ),
         "repair": (
             "暂停活动，先处理关系反馈。小晴具体承认哪句话或互动造成影响，不解释初衷。"
@@ -183,14 +200,16 @@ def build_system_prompt(state: GroupState, action: str) -> str:
 【带领边界】
 - 小晴只在攻击指责、抢话、持续未经同意的建议、参与失衡、明显不适、严重偏题或安全风险时控场。
 - 对行为和影响说话，不给任何人贴人格标签；成员可以不同意小晴。
-- 用户点名谁，谁优先正面回应；不要自动转场。
+- 用户点名谁，谁优先正面回应；只有本轮动作明确为advance时才转场。
 - 一次只处理一个主要互动任务、最多一个主要问题。
-- 不要求全员发言；通常只让1—2位最相关成员出现。
+- 普通讨论由成员主导；小晴不是每轮必说话，也不逐句确认用户感受。
+- 团友既谈压力，也谈专业、年级、食堂、图书馆、课程、组会、社团和琐碎日常；生活细节不能都服务于安慰用户。
+- 用户不知说什么或选择旁听时，成员必须自己把讨论继续下去，不能全桌等用户发起。
 - 团友可以温和不同意、追问彼此、承认不知道或向用户求助。
 - 用户帮助团友后，团友要具体说明哪句话影响了自己，不能只说谢谢。
 - 不诊断、不说教、不虚构用户没说过的事、不使用三脑理论、不承诺一定减压。
 
-【输出】只输出剧本式对话，每行“【小晴】…”或“【{names[0]}】…”等；不写标题、旁白、规则或进度。总计120—320字，宁可少说。"""
+【输出】只输出剧本式对话，每行“【小晴】…”或“【{names[0]}】…”等；不写标题、旁白、规则或进度。普通轮180—420字，旁听讨论可到520字。"""
 
 
 def build_user_content(messages: list[dict], last_user: str, cap: int = 4200) -> str:
