@@ -848,7 +848,7 @@ def test_stress_v2_contract_and_three_consistent_peers():
     assert "一次只处理一个主要互动任务" in plan.system_prompt
     assert plan.script.index("我们的第一个活动") < plan.script.index("【林之衡】")
     assert "回复一个选项" not in plan.script
-    assert "希望大家怎么称呼你、年级或专业" in plan.script
+    assert "希望大家怎么称呼你" in plan.script and "名字加学姐/学长" in plan.script
     state = group_v2.reconstruct([{"role": "assistant", "content": plan.marker}])
     assert state is not None and state.phase == 1 and len(state.team_ids) == 3
 
@@ -914,6 +914,8 @@ def test_v2_opening_hands_turn_to_peer_not_leader_interview():
     assert "让用户是在回应同伴而不是回应主持人" in prompt
     assert "整轮只能有一位团友向用户提出一个问题" in prompt
     assert "不能预告‘我会回来问你’" in prompt
+    assert "不得误说“你们三位”" in prompt
+    assert "不得把继续工作、熬夜、没有离场或硬撑本身称作力量" in prompt
 
 
 def test_v2_opening_handoff_validator_rejects_stranded_user():

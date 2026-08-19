@@ -151,9 +151,9 @@ async def _generate_v2_opening_handoff(
     # Deterministic last resort: never leave the participant without a turn cue.
     peer = (plan.meta.get("team") or ["团友"])[0]
     return last.rstrip() + (
-        "\n【小晴】我先收一下：大家都从自己的经历靠近了你，也看见你把几重压力直接说出来的勇气。"
+        "\n【小晴】我先收一下：大家都从自己的经历靠近了你，也看见你愿意把几重压力说出来。"
         f"我把话筒交给{peer}，我们先沿着一条线听。"
-        f"\n【{peer}】你刚才说的几件事里，哪一件最让你想先讲给我们听？也可以说“我先听”。"
+        f"\n【{peer}】你刚才说的几件事里，哪一件最让你想先讲给我们听？可以慢慢想，也可以继续听或停一下。"
     )
 
 
@@ -189,7 +189,7 @@ async def _generate_v2_advance(
     phase = cfg["phases"][int(plan.meta.get("round") or 1) - 1]
     peer = (plan.meta.get("team") or ["团友"])[0]
     return (
-        "【小晴】我先把刚才收在这里：大家已经说出了一些真实处境，也听见了彼此不同的部分。"
+        "【小晴】我先把刚才收在这里：大家愿意说出真实处境，也听见了彼此不同的部分。"
         f"\n【小晴】接下来进入“{phase['label']}”。{phase['activity']}你可以参与，也可以跳过或先听。"
         f"\n【{peer}】我先来做个示范，再听听其他人怎么接。"
     )
