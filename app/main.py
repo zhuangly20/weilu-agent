@@ -119,14 +119,17 @@ async def chat_completions(request: Request, authorization: str | None = Header(
         final_text = ""
         attachments: list = []
         yield protocol.sse_frame({"role": "assistant"})  # 首帧：role 帧
-        async for kind, payload in director.stream_plan(plan, settings.providers):
+        async for item in director.stream_plan(plan, settings.providers):
+            kind, payload = item[0], item[1]
             if kind == "delta":
                 if payload:
                     yield protocol.sse_frame({"content": payload})
             elif kind == "attachments":
                 attachments = payload
-            else:  # final
+            else:  # final（可带第三段附件）
                 final_text = payload
+                if len(item) > 2 and item[2]:
+                    attachments = item[2]
         usage = estimate_usage(prompt_text, final_text)
         extra = {"x_soda": {"attachments": attachments}} if attachments else None
         yield protocol.sse_frame({}, finish="stop", usage=usage, extra=extra)

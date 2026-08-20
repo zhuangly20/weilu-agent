@@ -47,7 +47,7 @@ FORM_CHAT = "chat"
 FORM_PAINTING = "painting"
 PAINTING_LABEL = "画会"  # 标记里的形式名
 
-FORM_KEYWORD_RE = re.compile(r"画会|画画|绘画|一起画|画一幅|画个画|画张画")
+FORM_KEYWORD_RE = re.compile(r"画会|画室|画画|绘画|一起画|画一幅|画个画|画张画")
 
 MAX_SWAPS = 2  # 每场最多换2位团友
 
@@ -145,8 +145,8 @@ def detect_theme(text: str, themes: list[dict]) -> dict | None:
     if not normalized:
         return None
     menu_words = {
-        "1": "self", "2": "academic", "3": "connection", "5": "career",
-        "一": "self", "二": "academic", "三": "connection", "五": "career",
+        "1": "academic", "2": "connection", "3": "love", "4": "career",
+        "一": "academic", "二": "connection", "三": "love", "四": "career",
     }
     for token in re.split(r"[\s,，。.、!！?？]", normalized):
         if token in menu_words:
@@ -159,7 +159,8 @@ def detect_theme(text: str, themes: list[dict]) -> dict | None:
                 return t
     best: tuple[int, dict | None] = (0, None)
     for t in themes:
-        score = sum(1 for kw in t.get("keywords", []) if kw and kw in normalized)
+        # 关键词按长度加权：更具体的短语（如"男朋友"）应胜过泛词（如"朋友"）。
+        score = sum(len(kw) for kw in t.get("keywords", []) if kw and kw in normalized)
         if score > best[0]:
             best = (score, t)
     if best[0] >= 1 and len(normalized) >= 4:
@@ -172,7 +173,7 @@ def detect_form(text: str) -> str:
     if FORM_KEYWORD_RE.search(text):
         return FORM_PAINTING
     for token in re.split(r"[\s,，。.、!！?？]", text.strip()):
-        if token in {"4", "四", "画会"}:
+        if token in {"5", "五", "画会", "画室"}:
             return FORM_PAINTING
     return FORM_CHAT
 

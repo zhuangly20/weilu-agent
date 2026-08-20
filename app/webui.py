@@ -95,20 +95,24 @@ PAGE = """<!DOCTYPE html>
   <div class="welcome">
     <img src="/assets/img/xqx-mascots.jpg" alt="清清华华心心理理">
     <div class="t">和小伙伴们一起，圆桌开聊 ☀️</div>
-    <div class="d">这不是一对一问答，而是一场 <b>AI 团体活动</b>：小晴会照你的话题，召唤一桌刚刚好的桌友——也许是走过相似低谷的过来人，也许就是园子里你最眼熟的同学。</div>
-    <div class="how"><b>怎么玩</b>：挑一个主题开桌 → 桌友亮相互相认识 → 八轮围聊（破冰 · 深谈 · 交换视角 · 真心话）→ 结束时全员送你一句临别赠言，还有一张手写明信片带走 ✨</div>
-    <div class="grp">① 挑个主题，开一场清心圆桌</div>
+    <div class="d">这不是一对一问答，而是一场 <b>AI 团体活动</b>：小晴会照你的话题，召集一桌刚刚好的 AI 同伴——三类形态、六个节目，总有一场适合此刻的你。</div>
+    <div class="how"><b>怎么玩</b>：回复数字或直接说最近的困惑 → 小晴帮你开桌 → 深度团体四个活动走完（约20分钟）→ 结束带走一份《圆桌留笺》；画室结束送一张明信片 ✨</div>
+    <div class="grp">① 深度团体（约20分钟，聊透一件事）</div>
     <div class="quick grid">
-      <button onclick="quickSend('想聊聊自我探索')">🧭 自我探索<small>我是谁、我想要什么</small></button>
       <button onclick="quickSend('我想参加减压安心之旅')">🫧 减压安心之旅<small>学业、科研、生活，来松一松</small></button>
-      <button onclick="quickSend('想聊聊新生适应')">🌱 新生适应<small>想家、宿舍、新环境</small></button>
-      <button onclick="quickSend('想聊聊就业迷茫')">🛤 就业迷茫<small>工作、升学、Gap</small></button>
+      <button onclick="quickSend('我是大一新生，想家，想参加新生适应')">🌱 新生适应<small>想家、宿舍、新环境</small></button>
+      <button onclick="quickSend('暗恋一个人两年了不敢表白，想参加爱情探索')">💞 爱情探索<small>心动、异地、表白与错过</small></button>
+      <button onclick="quickSend('秋招投了很多简历都没回音，想参加就业迷茫')">🛤 就业迷茫<small>秋招、考研、Gap、路口</small></button>
     </div>
-    <div class="grp">② 或者，来场 🎨 圆桌画会</div>
+    <div class="grp">② 轻团体（约10分钟，安静共创）</div>
     <div class="quick">
-      <button onclick="quickSend('来场画会吧，一起画一幅画')">🎨 画会<small>不用会画画——桌友用文字轮流添笔，共同完成一幅真正的画，送给你</small></button>
+      <button onclick="quickSend('来圆桌画室，画一幅关于最近的我的画')">🎨 圆桌画室<small>不用会画画——大家用文字各添一笔，合成一幅真正的画，送你一张明信片</small></button>
     </div>
-    <div class="d" style="margin-top:12px">也可以直接输入最近想说的话，小晴帮你挑主题</div>
+    <div class="grp">③ 对话面板</div>
+    <div class="quick">
+      <button onclick="quickSend('我想参加时空对话')">⏳ 时空对话<small>司马迁、项羽、张良……点四位史记人物，一问四答，看他们隔世辩论</small></button>
+    </div>
+    <div class="d" style="margin-top:12px">也可以直接输入最近想说的话，小晴帮你挑一场</div>
   </div>
 </main>
 <form onsubmit="return send(event)">
@@ -128,7 +132,7 @@ try { messages = JSON.parse(localStorage.getItem('weilu_msgs') || '[]'); } catch
 function persist(){ localStorage.setItem('weilu_msgs', JSON.stringify(messages)); }
 
 function copyChat(){
-  const clean = s => s.replace(/<!--QXG2\\|[\\s\\S]*?-->/g, '').trim();
+  const clean = s => s.replace(/<!--QX(?:G2|SD|PA)\\|[\\s\\S]*?-->/g, '').trim();
   const text = messages.map(m => m.role === 'user' ? '【我】' + m.content : clean(m.content)).join('\\n\\n');
   const done = () => { const b = document.getElementById('copyBtn'); b.textContent = '✅ 已复制';
                        setTimeout(() => b.textContent = '📋 复制对话', 1500); };
@@ -189,12 +193,12 @@ function renderRound(acc, box){
   box.innerHTML = '';
   let textEl = null;
   for (const ln of acc.split('\\n')){
-    if (ln.trim().startsWith('<!--QXG2|')) continue;
+    if (ln.trim().startsWith('<!--QX')) continue;
     const m = ln.match(/^【([^】]+)】(.*)$/);
     if (m){
       textEl = makeBubble(m[1].trim(), box);
       textEl.textContent = m[2];
-    } else if (ln.trim().startsWith('（圆桌进度') || ln.trim().startsWith('📍')){
+    } else if (ln.trim().startsWith('（圆桌进度') || /^[📍⏳🎨✨]/.test(ln.trim())){
       const d = document.createElement('div');
       d.style.cssText = 'color:var(--dim);font-size:12px;text-align:center;margin:16px 0 4px';
       d.textContent = ln.trim();

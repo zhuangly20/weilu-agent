@@ -1,6 +1,7 @@
 """配置加载：YAML 剧本配置 + 环境变量模型供应商配置。"""
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -67,6 +68,33 @@ def load_crisis_config() -> dict:
 
 def load_group_v2_config() -> dict:
     return _load_yaml("group_v2.yaml")
+
+
+_GROUP_THEME_FILES = {
+    "academic": "group_v2.yaml",
+    "connection": "group_connection.yaml",
+    "love": "group_love.yaml",
+    "career": "group_career.yaml",
+}
+
+
+def load_group_theme_config(theme: str) -> dict:
+    """按主题加载四活动团体配置；未知主题回落到减压（academic）。"""
+    name = _GROUP_THEME_FILES.get(theme or "academic", "group_v2.yaml")
+    return _load_yaml(name)
+
+
+# 史记人物库：与史料人物无关的通用/现代条目不进入时空对话
+_SHIJI_EXCLUDED = {"通用角色", "局座", "毛选专家", "权谋军师（知乎权谋蒸馏）", "掌印太监"}
+_shiji_cache: list[dict] | None = None
+
+
+def load_shiji_figures() -> list[dict]:
+    global _shiji_cache
+    if _shiji_cache is None:
+        raw = json.loads((CONFIG_DIR / "shiji_registry.json").read_text(encoding="utf-8"))
+        _shiji_cache = [p for p in raw if p.get("name") not in _SHIJI_EXCLUDED]
+    return _shiji_cache
 
 
 def _load_providers_from_env() -> list[ProviderConfig]:

@@ -80,49 +80,104 @@ painting_stages:
     label: 成长手记
     brief: 小晴生成结构化的成长手记与明信片
 themes:
-- id: self
-  label: 自我探索
-  full_label: 自我探索与自我接纳
-  menu_desc: '''我是谁、我想要什么''——和圆桌边的人一起找答案'
+- id: connection
+  label: 新生适应
+  full_label: 新生适应与人际连接
+  menu_desc: 想家、宿舍、新环境——在这里你不是一个新人
   keywords:
-  - 自己
-  - 自我
-  - 是谁
-  - 意义
-  - 迷茫
-  - 喜欢什么
-  - 想要
-  - 接纳
-  - 认识自己
-  - 方向感
-  - 找不到自己
-  icebreak: 如果用一样东西来形容最近的你，你会选什么？可以是一样物品、一种天气、一个小动物，什么都行。
-  activity: 过去一年里，有没有一个瞬间，哪怕特别小，让你觉得'那一刻的我，是我喜欢的样子'？
-  closing_question: 这场圆桌过后，你最想对自己说的一句话是什么？
-  persp_guidance: 从'换个参照系'的角度：不评价用户的选择，用自己独特的视角让用户看到同一件事的另一种讲法。
-  report_focus: 用户如何描述自己、成员们照见出的特质、用户本场流露的力量
+  - 新生
+  - 入学
+  - 军训
+  - 室友
+  - 宿舍
+  - 想家
+  - 孤独
+  - 社交
+  - 朋友
+  - 适应
+  - ' belonging'
+  - 不合群
+  - 融入
+  - 认识人
+  - 陌生
+  icebreak: 来到这里之后，第一个让你觉得「诶，我好像能在这儿待下去」的小瞬间是什么？可以是很小的事。
+  activity: 说说你最怀念的、来的那个地方的一个小细节——一种味道、一条街、一个声音，都可以。
+  closing_question: 如果能对刚下火车、拖着行李箱的自己说一句话，你会说什么？
+  persp_guidance: 从'微小的连接'的角度：不否定用户的孤独，用自己视角让用户看见已经发生的小连接。
+  report_focus: 用户的归属感受、本场浮现的微小连接、成员们看到的用户已经迈出的小步
   painting:
-    framing: 这幅画关于「最近的自己」——把各自心里那个说不清的自己，一笔一笔放进画里
-    reflection_1: 第一次看到这幅完成的画，哪个角落最像现在的你？
-    reflection_2: 画下你自己那一笔的时候，你心里在想什么？
+    framing: 这幅画关于「你想念的和想抵达的」——把各自心里那个地方画进同一幅画
+    reflection_1: 第一次看到这幅完成的画，画里哪个角落让你想坐一会儿？
+    reflection_2: 画下你自己那一笔的时候，你想起了谁？
   slots:
     bt_hist:
-    - sushi
-    - wangyangming
-    - simaqian
+    - zhushenghao
+    - linhuiyin
+    - dufu
     dp_hist:
+    - teresa
+    - libai
     - zhuangzi
-    - davinci
-    - einstein
     bt_peer:
-    - linzhiheng
     - suxiao
+    - linzhiheng
     - chenmo
     qr_peer:
+    - guyifan
     - xiaoman
     - wenyan
+- id: love
+  label: 爱情探索
+  full_label: 爱情探索与亲密关系
+  menu_desc: 心动、暗恋、异地、表白与错过——把亲密关系放到圆桌上
+  keywords:
+  - 爱情
+  - 恋爱
+  - 恋情
+  - 恋
+  - 心动
+  - 暗恋
+  - 喜欢
+  - 表白
+  - 告白
+  - 失恋
+  - 分手
+  - 异地恋
+  - 异地
+  - 暧昧
+  - 男朋友
+  - 女朋友
+  - 对象
+  - 脱单
+  - 母胎单身
+  - crush
+  - 择偶
+  icebreak: 你和"心动"这件事现在是什么关系？一句话就好。
+  activity: 讲一个具体的心动时刻，或一段关系里你最记住的瞬间。
+  closing_question: 你的一段关系现在缺哪一角，你想先补哪一角？
+  persp_guidance: 用斯滕伯格三元论的镜子照故事，判断权永远在本人。
+  report_focus: 用户的关系现状与心动故事、三元维度线索、关系应对与练习
+  painting:
+    framing: 这幅画关于「心动的那一瞬间」——把各自最记住的一个瞬间画进同一幅画
+    reflection_1: 第一次看到这幅完成的画，哪个角落让你想多看一会儿？
+    reflection_2: 画下你自己那一笔的时候，你想起了谁？
+  slots:
+    bt_hist:
+    - zhushenghao
+    - linhuiyin
+    - dufu
+    dp_hist:
+    - teresa
+    - libai
+    - zhuangzi
+    bt_peer:
+    - suxiao
+    - linzhiheng
+    - chenmo
+    qr_peer:
     - guyifan
-    - xunanzhi
+    - xiaoman
+    - wenyan
 - id: academic
   label: 减压安心之旅
   full_label: 减压安心之旅——压力管理
@@ -214,52 +269,6 @@ themes:
     - xiaoman
     - wenyan
     - xunanzhi
-- id: connection
-  label: 新生适应
-  full_label: 新生适应与人际连接
-  menu_desc: 想家、宿舍、新环境——在这里你不是一个新人
-  keywords:
-  - 新生
-  - 入学
-  - 军训
-  - 室友
-  - 宿舍
-  - 想家
-  - 孤独
-  - 社交
-  - 朋友
-  - 适应
-  - ' belonging'
-  - 不合群
-  - 融入
-  - 认识人
-  - 陌生
-  icebreak: 来到这里之后，第一个让你觉得「诶，我好像能在这儿待下去」的小瞬间是什么？可以是很小的事。
-  activity: 说说你最怀念的、来的那个地方的一个小细节——一种味道、一条街、一个声音，都可以。
-  closing_question: 如果能对刚下火车、拖着行李箱的自己说一句话，你会说什么？
-  persp_guidance: 从'微小的连接'的角度：不否定用户的孤独，用自己视角让用户看见已经发生的小连接。
-  report_focus: 用户的归属感受、本场浮现的微小连接、成员们看到的用户已经迈出的小步
-  painting:
-    framing: 这幅画关于「你想念的和想抵达的」——把各自心里那个地方画进同一幅画
-    reflection_1: 第一次看到这幅完成的画，画里哪个角落让你想坐一会儿？
-    reflection_2: 画下你自己那一笔的时候，你想起了谁？
-  slots:
-    bt_hist:
-    - zhushenghao
-    - linhuiyin
-    - dufu
-    dp_hist:
-    - teresa
-    - libai
-    - zhuangzi
-    bt_peer:
-    - suxiao
-    - linzhiheng
-    - chenmo
-    qr_peer:
-    - guyifan
-    - xiaoman
-    - wenyan
 - id: career
   label: 就业迷茫
   full_label: 毕业去向与就业迷茫
@@ -311,4 +320,47 @@ themes:
     qr_peer:
     - wenyan
     - xiaoman
+    - xunanzhi
+- id: self
+  label: 自我探索
+  full_label: 自我探索与自我接纳
+  menu_desc: '''我是谁、我想要什么''——和圆桌边的人一起找答案'
+  keywords:
+  - 自己
+  - 自我
+  - 是谁
+  - 意义
+  - 迷茫
+  - 喜欢什么
+  - 想要
+  - 接纳
+  - 认识自己
+  - 方向感
+  - 找不到自己
+  icebreak: 如果用一样东西来形容最近的你，你会选什么？可以是一样物品、一种天气、一个小动物，什么都行。
+  activity: 过去一年里，有没有一个瞬间，哪怕特别小，让你觉得'那一刻的我，是我喜欢的样子'？
+  closing_question: 这场圆桌过后，你最想对自己说的一句话是什么？
+  persp_guidance: 从'换个参照系'的角度：不评价用户的选择，用自己独特的视角让用户看到同一件事的另一种讲法。
+  report_focus: 用户如何描述自己、成员们照见出的特质、用户本场流露的力量
+  painting:
+    framing: 这幅画关于「最近的自己」——把各自心里那个说不清的自己，一笔一笔放进画里
+    reflection_1: 第一次看到这幅完成的画，哪个角落最像现在的你？
+    reflection_2: 画下你自己那一笔的时候，你心里在想什么？
+  slots:
+    bt_hist:
+    - sushi
+    - wangyangming
+    - simaqian
+    dp_hist:
+    - zhuangzi
+    - davinci
+    - einstein
+    bt_peer:
+    - linzhiheng
+    - suxiao
+    - chenmo
+    qr_peer:
+    - xiaoman
+    - wenyan
+    - guyifan
     - xunanzhi
