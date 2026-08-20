@@ -1,4 +1,4 @@
-"""内置测试页：小清心暖色明亮风（吉祥物头像 + 奶油底 + 珊瑚橘主色）。"""
+"""公开体验页：免key直接聊（走 /public/chat/completions，服务端限流）。"""
 from __future__ import annotations
 
 from fastapi.responses import HTMLResponse
@@ -30,9 +30,7 @@ PAGE = """<!DOCTYPE html>
   header h1 b{color:var(--accent-deep);}
   header .tag{font-size:12px;color:#fff;background:linear-gradient(120deg,var(--accent),var(--gold));
               padding:2px 10px;border-radius:12px;font-weight:600;}
-  #key{margin-left:auto;background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:10px;
-       padding:5px 10px;font-size:12px;width:200px;box-shadow:0 1px 3px rgba(90,70,54,.05);}
-  .tools{display:flex;gap:8px;}
+  .tools{display:flex;gap:8px;margin-left:auto;}
   .tools button{background:#fff;border:1px solid var(--line);color:var(--dim);border-radius:10px;
                 padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;box-shadow:none;}
   .tools button:hover{border-color:var(--accent);color:var(--accent-deep);transform:none;}
@@ -85,7 +83,6 @@ PAGE = """<!DOCTYPE html>
 <header>
   <img class="logo" src="/assets/img/xqx-logo.jpg" alt="小清心">
   <h1>清心圆桌</h1><span class="tag">AI团体支持空间</span>
-  <input id="key" placeholder="API Key（sk-weilu-开头）" title="API Key">
   <div class="tools">
     <button onclick="copyChat()" id="copyBtn" title="复制完整对话记录">📋 复制对话</button>
     <button onclick="resetChat()" title="清空记录，重新开始">🔄 重开</button>
@@ -123,9 +120,6 @@ PAGE = """<!DOCTYPE html>
 const log = document.getElementById('log');
 const input = document.getElementById('input');
 const btn = document.getElementById('btn');
-const keyBox = document.getElementById('key');
-keyBox.value = localStorage.getItem('weilu_key') || '';
-keyBox.addEventListener('change', () => localStorage.setItem('weilu_key', keyBox.value.trim()));
 let messages = [];
 try { messages = JSON.parse(localStorage.getItem('weilu_msgs') || '[]'); } catch(e){ messages = []; }
 
@@ -263,9 +257,9 @@ async function send(ev){
   log.appendChild(box);
   let acc = '';
   try {
-    const resp = await fetch('/v1/chat/completions', {
+    const resp = await fetch('/public/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + keyBox.value.trim() },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stream: true, messages })
     });
     if (!resp.ok){ makeBubble('小晴', box).textContent = 'HTTP ' + resp.status + ' — ' + (await resp.text()).slice(0,200); return false; }

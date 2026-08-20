@@ -1466,3 +1466,38 @@ async def test_report_html_flow(monkeypatch):
     assert "7 分" in page  # 压力温度前测块
     assert "bilibili" in page  # 练习链接
     assert "斑马" in page  # 书单
+
+
+# ---------- 免key公开体验端点 ----------
+
+
+@pytest.mark.asyncio
+async def test_public_endpoint_no_key_scripted(client):
+    resp = await client.post(
+        "/public/chat/completions",
+        json={"stream": False, "messages": [{"role": "user", "content": "我想参加时空对话"}]},
+    )
+    assert resp.status_code == 200
+    text = resp.json()["choices"][0]["message"]["content"]
+    assert "想聊什么" in text  # intro 新流程，纯脚本零LLM
+
+
+@pytest.mark.asyncio
+async def test_public_rate_limit_per_ip(client, monkeypatch):
+    monkeypatch.setenv("PUBLIC_RATE_HOUR", "2")
+    hdrs = {"x-forwarded-for": "203.0.113.7"}
+    msgs = [{"role": "user", "content": "我想参加时空对话"}]
+    codes = [
+        (await client.post("/public/chat/completions", headers=hdrs, json={"messages": msgs})).status_code
+        for _ in range(3)
+    ]
+    assert codes[:2] == [200, 200] and codes[2] == 429
+
+
+@pytest.mark.asyncio
+async def test_v1_still_requires_key(client):
+    resp = await client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert resp.status_code == 401
