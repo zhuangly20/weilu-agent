@@ -1106,13 +1106,14 @@ def _studio_plan(messages: list[dict], last_user: str, current: painting_studio.
         return plan
     user_stroke = painting_studio.user_stroke_text(last_user)
     strokes = painting_studio.parse_strokes(messages)
-    if painting_studio.NO_STROKE_RE.search(last_user):
+    if action == "strokes" and painting_studio.NO_STROKE_RE.search(last_user):
         strokes = strokes + [("小晴（代笔）", "我想在这幅画上加上一杯冒着热气的茶，代表你的位置")]
     system_prompt = painting_studio.build_system_prompt(state, team, action, user_stroke, strokes)
     note = {
         "strokes": "🎨 圆桌画室 · 四笔收齐，准备合成",
         "reveal": "🎨 圆桌画室 · 画作揭晓",
-        "reflect": "🎨 圆桌画室 · 明信片在附件里",
+        "discuss": "🎨 圆桌画室 · 自由讨论",
+        "close": "🎨 圆桌画室 · 明信片在附件里",
     }.get(action, "🎨 圆桌画室")
     plan = TurnPlan(
         kind="generate", system_prompt=system_prompt,
@@ -1436,7 +1437,7 @@ async def execute_plan(
                     "fileName": "圆桌画室·共同画作.jpg", "fileType": "image",
                     "mimeType": "image/jpeg", "fileSize": len(img),
                 })
-        if action == "reflect":
+        if action == "close":
             attachments.extend(_studio_postcard_attachment(plan, body))
         return _finalize_body(plan, body), issues, attachments
     if (plan.meta.get("v2") and plan.meta.get("round") == 1
@@ -1646,7 +1647,7 @@ async def stream_plan(
                     "fileName": "圆桌画室·共同画作.jpg", "fileType": "image",
                     "mimeType": "image/jpeg", "fileSize": len(img),
                 })
-        if action == "reflect":
+        if action == "close":
             attachments.extend(_studio_postcard_attachment(plan, body))
         if attachments:
             yield "attachments", attachments

@@ -1,12 +1,14 @@
 """圆桌画室：轻团体绘画共创（小晴问一次、每人对一次）。
 
-流程（四次 LLM/脚本输出）：
+流程：
   1. 开场脚本    命题+规则+团友A一笔+邀请用户落笔（固定脚本，零延迟）
   2. strokes     用户落笔后，团友B、C各添一笔并预告合成
-  3. reveal      合成画作并揭晓；团友可即席感受一两句，小晴立即收住并抛出反思问题
-  4. reflect     三位团友各一句回顾+小晴总结+明信片HTML附件
+  3. reveal      合成画作并揭晓；团友即席感受，小晴收住并邀请自由讨论
+  4. discuss     自由讨论（感受+落笔原因）；每两轮小晴问一次是否结束，可循环
+  5. close       用户选择结束后：三位团友各一句回顾+小晴总结+明信片HTML附件
 
-状态为"等待什么"：user_stroke → reveal_ready → reflecting → done。
+状态为"等待什么"：user_stroke → reveal_ready → discussing → done。
+讨论轮数用 disc（0/1/2）记录：2 表示刚问过"是否结束"。
 完成条件全部可枚举：who 列表四位各一笔（用户可由小晴代笔）。
 图像生成失败时以文字画完成流程，绝不阻塞完成条件。
 """
@@ -20,7 +22,7 @@ from .config import load_group_v2_config
 from .session import extract_text
 
 MARKER_RE = re.compile(
-    r"<!--QXPA\|step=([a-z_]+)\|who=([^|>]*)(?:\|img=([^|>]*))?-->"
+    r"<!--QXPA\|step=([a-z_]+)\|who=([^|>]*)(?:\|img=([^|>]*))?(?:\|disc=(\d+))?-->"
 )
 STUDIO_NAME_RE = re.compile(r"画室|画会|一起画|共同.{0,4}画|画一幅|绘画主题|来画画")
 STROKE_PREFIX_RE = re.compile(r"^(我希望这幅画上有|我想在这幅画上加上)")
@@ -43,16 +45,18 @@ FIRST_STROKE = {
 
 @dataclass
 class StudioState:
-    step: str = "user_stroke"  # user_stroke / reveal_ready / reflecting / done
+    step: str = "user_stroke"  # user_stroke / reveal_ready / discussing / done
     who: list[str] = field(default_factory=list)  # 已落笔者：p0/p1/p2/u
     img_token: str = ""
     topic_seed: str = ""
+    disc: int = 0  # 讨论轮数（0/1/2）：2 表示刚问过"是否结束"
 
 
 def marker(state: StudioState) -> str:
     return (
         f"<!--QXPA|step={state.step}|who={','.join(state.who)}"
         + (f"|img={state.img_token}" if state.img_token else "")
+        + (f"|disc={state.disc}" if state.disc else "")
         + "-->"
     )
 
@@ -67,8 +71,11 @@ def reconstruct(messages: list[dict]) -> StudioState | None:
             found = hits[-1]
     if found is None:
         return None
-    step, who, img = found
-    return StudioState(step=step, who=[x for x in who.split(",") if x], img_token=img or "")
+    step, who, img, disc = found
+    return StudioState(
+        step=step, who=[x for x in who.split(",") if x],
+        img_token=img or "", disc=int(disc or 0),
+    )
 
 
 def framing_from_seed(seed: str) -> str:
@@ -125,18 +132,33 @@ def user_stroke_text(last_user: str) -> str:
     return f"我想在这幅画上加上{core[:60]}"
 
 
+END_SIGNAL_RE = re.compile(r"结束|就到这|就到这里|到此为止|今天就到|先到这|散了吧|散会|再见|拜拜")
+CONTINUE_RE = re.compile(r"继续|再聊|不结束|别结束|还没结束|接着|还想")
+
+
+def _wants_end(last_user: str) -> bool:
+    """讨论阶段的结束信号：明确说结束/散会，且未带"继续/不结束"否定。"""
+    if CONTINUE_RE.search(last_user):
+        return False
+    return bool(END_SIGNAL_RE.search(last_user))
+
+
 def next_state(last_user: str, current: StudioState) -> tuple[StudioState, str]:
-    """返回 (新状态, 动作)。动作：strokes / reveal / reflect。"""
+    """返回 (新状态, 动作)。动作：strokes / reveal / discuss / close。"""
     if current.step == "user_stroke":
         # 用户落笔后团友B、C各添一笔：四位贡献者就此收齐
         who = list(dict.fromkeys(current.who + ["u", "p1", "p2"]))
-        return StudioState("reveal_ready", who, current.img_token, current.topic_seed), "strokes"
+        return StudioState("reveal_ready", who, current.img_token, current.topic_seed, 0), "strokes"
     if current.step == "reveal_ready":
-        return StudioState("reflecting", current.who, current.img_token, current.topic_seed), "reveal"
-    if current.step == "reflecting":
-        return StudioState("done", current.who, current.img_token, current.topic_seed), "reflect"
+        return StudioState("discussing", current.who, current.img_token, current.topic_seed, 0), "reveal"
+    if current.step == "discussing":
+        if _wants_end(last_user):
+            return StudioState("done", current.who, current.img_token, current.topic_seed, 0), "close"
+        # 两轮一周期：0→1（第1轮）、1→2（第2轮并问结束）、2→1（用户选择继续，进新周期第1轮）
+        disc = 1 if current.disc in (0, 2) else 2
+        return StudioState("discussing", current.who, current.img_token, current.topic_seed, disc), "discuss"
     # done 之后：小晴温和送客
-    return StudioState("done", current.who, current.img_token, current.topic_seed), "reflect"
+    return StudioState("done", current.who, current.img_token, current.topic_seed, 0), "close"
 
 
 def build_system_prompt(state: StudioState, team: list[str], action: str,
@@ -163,24 +185,40 @@ def build_system_prompt(state: StudioState, team: list[str], action: str,
         # generate_painting 三级降级后永不返回 None：本轮一定有真画（最差是暖色兜底图）。
         # 提示词构建时 img_token 尚未生成，故这里无条件按「已合成真画」来描述。
         img_note = (
-            "系统已把这四笔合成一幅真实的画（本轮会作为附件送出）。小晴揭晓："
-            "两三句描述画里有什么、四笔各自在哪里；两位团友各用一句说出看到画的第一感受，"
-            "可以互相接半句——这是本场唯一可以多聊两句的时刻；"
-            "然后小晴立即收住（“画我们先记在心里”），并顺势抛出一个反思问题，例如："
-            "现在看着这幅画，你自己那一笔和你落笔时想的一样吗？"
+            "系统正在把这四笔合成一幅真实的画（本轮会作为附件送出，通常需要30秒左右）。"
+            "小晴揭晓时先对用户说一句“画作正在合成，大约需要30秒，请稍等一下哦～”；"
+            "然后两三句描述画里有什么、四笔各自在哪里；两位团友各用一句说出看到画的第一感受，"
+            "可以互相接半句；最后小晴收住，并邀请大家自由聊一聊：看到这幅画时的感受，"
+            "或者各自画下那一笔的原因，把话头轻轻递给用户（“你愿意先说吗？”）。"
         )
         task = f"本场已落下的笔触：\n{stroke_lines}\n\n{img_note}"
-        fmt = "输出：小晴揭晓 → 两位团友各一句（可互相接半句）→ 小晴收住+一个反思问题。不用markdown加粗，全场不超过280字。"
-    else:  # reflect
+        fmt = "输出：小晴揭晓（先提示等待约30秒）→ 两位团友各一句（可互相接半句）→ 小晴收住并邀请自由讨论（把话头递给用户）。不用markdown加粗，全场不超过280字。"
+    elif action == "discuss":
+        ask_end = state.disc == 2
         task = (
-            "用户刚刚回应了反思问题。三位团友各用一句话回应用户"
-            "（只回应、不提问、不建议，35—70字，说自己的画和此刻的感觉）；"
+            "这是画作揭晓后的自由讨论。大家围绕两件事聊：看到这幅画时的感受，"
+            "以及各自画下那一笔的原因；可以互相轻轻接话、共鸣，但不评判、不建议、不诊断。"
+            "小晴把话题带活、照顾到每位团友，最后把话头交还给用户。"
+        )
+        if ask_end:
+            task += (
+                " 本轮是第二轮讨论，讨论结束后小晴温和地问用户："
+                "“我们聊到这里，你想再聊两轮，还是今天就到这儿？”"
+            )
+        fmt = "输出：三位团友各一句 + 小晴一两句（" + (
+            "末尾询问是否结束" if ask_end else "把话头交还用户"
+        ) + "）。不用markdown加粗，全场不超过300字。"
+    else:  # close
+        task = (
+            "用户选择了结束这场画室。三位团友各用一句话说出这一场最想带走的感觉"
+            "（说自己的画和此刻的感觉，不提问、不建议）；"
             "然后小晴总结：这幅画由四笔组成、每一笔分别是谁的，再用一句温柔的话把画送给用户，"
             "并说明明信片已经整理好、就在下面的附件里。"
         )
         fmt = "输出：三位团友各一句 → 小晴总结送别。不提问、不用markdown加粗，全场不超过260字。"
     return f"""你是「圆桌画室」的导演。这是一场安静的轻团体：小晴问一次，每人对一次；
-除画作揭晓那一刻的即席感受外，成员之间不多轮交谈。场景是洒满阳光的画室，圆桌上摊着一张大画纸。
+画作揭晓后进入自由讨论，大家聊感受、聊各自那一笔的原因，每两轮小晴问一次是否结束。
+场景是洒满阳光的画室，圆桌上摊着一张大画纸。
 
 【三位团友（虚构AI角色）】
 {profiles}
@@ -220,13 +258,11 @@ def stroke_issues(text: str, team_names: list[str], action: str) -> list[str]:
             lm = re.match(r"^【([^】]+)】\s*(.+)$", line.strip())
             if lm and lm.group(1) in team_names and not STROKE_ANYWHERE_RE.search(lm.group(2)):
                 issues.append(f"bad-stroke-format:{lm.group(1)}")
-    if action == "reflect":
+    if action == "close":
         for line in text.splitlines():
             lm = re.match(r"^【([^】]+)】\s*(.+)$", line.strip())
             if lm and lm.group(1) in team_names and ("？" in lm.group(2) or "?" in lm.group(2)):
-                issues.append(f"reflect-question:{lm.group(1)}")
-    if action == "reveal" and "？" not in text and "?" not in text:
-        issues.append("missing-reflection-question")
+                issues.append(f"close-question:{lm.group(1)}")
     if len(text) > 800:
         issues.append("too-long")
     return issues
@@ -234,6 +270,7 @@ def stroke_issues(text: str, team_names: list[str], action: str) -> list[str]:
 
 def studio_fallback(action: str, team_names: list[str], user_stroke: str) -> str:
     """生成失败时的确定性兜底：固定笔触与收束，绝不卡流程。"""
+    a = team_names[0] if team_names else "团友甲"
     b, c = (team_names[1:3] + ["团友乙", "团友丙"])[:2]
     if action == "strokes":
         return (
@@ -248,9 +285,15 @@ def studio_fallback(action: str, team_names: list[str], user_stroke: str) -> str
             "每一笔都还在它落下的位置。\n"
             f"【{b}】看到它变成一幅真的画，心里轻轻落了一下。\n"
             f"【{c}】我那一笔在角落里待着，刚刚好。\n"
-            "【小晴】画我们先记在心里。现在看着它——你自己那一笔，和你落笔时想的一样吗？"
+            "【小晴】画我们先记在心里。看到这幅画有什么感受、为什么画下那一笔，都可以聊一聊。你愿意先说吗？"
         )
-    a = team_names[0] if team_names else "团友甲"
+    if action == "discuss":
+        return (
+            f"【{a}】我看着这幅画，心里轻轻落了一下，像把自己那点心事也放了进去。\n"
+            f"【{b}】我画下那一笔的时候，其实是在说“我想慢一点”。\n"
+            f"【{c}】我也是——我那一笔里藏着一点没处放的累。\n"
+            "【小晴】大家继续说，想聊感受、聊原因都可以，我在这里陪着。"
+        )
     return (
         f"【{a}】这幅画里有你的那一笔，也有我们各自的一角。\n"
         f"【{b}】把它带回去吧，累的时候看一眼。\n"

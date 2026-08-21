@@ -118,9 +118,19 @@ def test_studio_state_machine_four_steps():
     s1, act1 = painting_studio.next_state("我想加上一盏路灯", s0)
     assert act1 == "strokes" and "u" in s1.who and s1.step == "reveal_ready"
     s2, act2 = painting_studio.next_state("好了", s1)
-    assert act2 == "reveal" and s2.step == "reflecting"
-    s3, act3 = painting_studio.next_state("和我落笔时想的一样", s2)
-    assert act3 == "reflect" and s3.step == "done"
+    assert act2 == "reveal" and s2.step == "discussing" and s2.disc == 0
+    # 第1轮讨论
+    s3, act3 = painting_studio.next_state("我看着这幅画，想到那天晚上", s2)
+    assert act3 == "discuss" and s3.step == "discussing" and s3.disc == 1
+    # 第2轮讨论：末尾会问是否结束
+    s4, act4 = painting_studio.next_state("我画那盏灯，是因为想照亮自己", s3)
+    assert act4 == "discuss" and s4.step == "discussing" and s4.disc == 2
+    # 用户说继续 → 进入新一轮第1轮
+    s5, act5 = painting_studio.next_state("继续", s4)
+    assert act5 == "discuss" and s5.disc == 1
+    # 用户说结束 → 收尾
+    s6, act6 = painting_studio.next_state("结束吧", s4)
+    assert act6 == "close" and s6.step == "done"
 
 
 def test_studio_stroke_format_validation():
@@ -138,8 +148,8 @@ def test_studio_stroke_format_validation():
     assert any(i.startswith("bad-stroke-format") for i in issues)
     missing = ok.replace("【许南枝】我想在这幅画上加上食堂傍晚的灯，暖黄的那种。\n", "")
     assert any(i.startswith("missing-stroke") for i in painting_studio.stroke_issues(missing, names, "strokes"))
-    reflect_q = "【陈默】你画的那个角落，现在还重要吗？"
-    assert any(i.startswith("reflect-question") for i in painting_studio.stroke_issues(reflect_q, names, "reflect"))
+    close_q = "【陈默】你画的那个角落，现在还重要吗？"
+    assert any(i.startswith("close-question") for i in painting_studio.stroke_issues(close_q, names, "close"))
 
 
 def test_studio_fallback_complete_flow():
@@ -157,8 +167,8 @@ def test_postcard_html_renders_with_and_without_artwork():
     assert "我想在这幅画上加上一盏台灯".encode() in no_img
 
 
-def test_studio_reflect_turn_attaches_postcard(monkeypatch):
-    """reflect 轮返回明信片 HTML 附件（确定性字段，无 LLM JSON）。"""
+def test_studio_close_turn_attaches_postcard(monkeypatch):
+    """close 轮返回明信片 HTML 附件（确定性字段，无 LLM JSON）。"""
     from pathlib import Path
 
     msgs = [
@@ -173,8 +183,8 @@ def test_studio_reflect_turn_attaches_postcard(monkeypatch):
         {"role": "user", "content": "好了"},
         {"role": "assistant", "content":
             "【小晴】画回来了。\n你想的那一笔还在。\n"
-            + painting_studio.marker(painting_studio.StudioState("reflecting", ["p0", "u", "p1", "p2"], "", "来画室画一幅画"))},
-        {"role": "user", "content": "和我落笔时想的一样，很安心"},
+            + painting_studio.marker(painting_studio.StudioState("discussing", ["p0", "u", "p1", "p2"], "", "来画室画一幅画", 2))},
+        {"role": "user", "content": "结束吧"},
     ]
 
     async def fake_generate(providers, messages, **kw):
@@ -182,7 +192,7 @@ def test_studio_reflect_turn_attaches_postcard(monkeypatch):
 
     monkeypatch.setattr("app.director.generate", fake_generate)
     plan = director.plan_turn(msgs)
-    assert plan.meta.get("studio_action") == "reflect"
+    assert plan.meta.get("studio_action") == "close"
     team = plan.meta["team"]
 
     async def fake_team_generate(providers, messages, **kw):
