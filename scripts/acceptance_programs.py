@@ -54,19 +54,22 @@ async def main() -> None:
         check("面板·告别留笺", text, att)
         assert any(a.get("fileName") == "时空留笺.html" for a in att), "告别轮应产出时空留笺报告"
 
-        # 2) 圆桌画室：入口→落笔→合成→揭晓(真画)→反思(明信片HTML)
+        # 2) 圆桌画室：入口→落笔→合成→揭晓(真画)→自由讨论两轮→继续→结束(明信片HTML)
         msgs = [{"role": "user", "content": "来圆桌画室，画一幅关于最近的我的画"}]
         for step in ["我想在这幅画上加上一盏宿舍的小夜灯",
                      "好了",
-                     "和我落笔时想的一样，很安心"]:
+                     "看到这幅画，我想起晚自习后一个人走回宿舍的路",
+                     "我画那盏灯，是想照亮自己有点累的时候",
+                     "继续",
+                     "结束吧"]:
             text, att = await turn(client, msgs)
             check(f"画室·{step[:10]}", text, att)
             msgs.append({"role": "assistant", "content": text})
             msgs.append({"role": "user", "content": step})
-        # 反思轮：验证明信片 HTML 附件（含画）
+        # 结束轮：验证明信片 HTML 附件（含画）
         text, att = await turn(client, msgs)
         check("画室·明信片", text, att)
-        assert any(a.get("fileName") == "圆桌画室·明信片.html" for a in att), "反思轮应产出明信片HTML"
+        assert any(a.get("fileName") == "圆桌画室·明信片.html" for a in att), "结束轮应产出明信片HTML"
 
         # 3) 新生适应：开场→自我介绍→第一段聚焦
         msgs = [{"role": "user", "content": "我是大一新生，想家，室友都说方言我插不上话"}]
